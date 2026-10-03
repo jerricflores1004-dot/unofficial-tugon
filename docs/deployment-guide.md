@@ -3,14 +3,43 @@
 ## Vercel
 
 1. Import the repository and set the project root to `web` (or use the root workspace scripts).
-2. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL`, and the server-only integration keys in Vercel. Keep `SUPABASE_SERVICE_ROLE_KEY` and `FIREBASE_SERVER_KEY` in server-only environment scope.
-3. Set `NEXT_PUBLIC_DEMO_MODE=false` in every deployed environment.
-4. Add the Vercel URL to Supabase Auth redirect URLs.
-5. Run `npm run build` as the deployment check.
+2. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL`, and the optional integration keys in Vercel. Keep `SUPABASE_SERVICE_ROLE_KEY` and `FIREBASE_SERVER_KEY` in server-only environment scope.
+3. Add the Vercel URL to Supabase Auth redirect URLs.
+4. Run `npm run build` as the deployment check.
+
+There is no demo mode to disable. Without valid Supabase variables the deployed
+workspace shows a configuration error and refuses sign-in; it never renders
+sample records. Verify after deploying that the sidebar reads **Live** and that
+`/api/workspace/summary` reports `database: true`.
 
 ## Supabase
 
-Link the project and run `supabase db push` followed by `supabase db seed`. Confirm RLS is enabled, Realtime includes the four published tables, and `incident-photos` is private. Enable Auth email confirmation and configure SMTP for production.
+Link the project and run `supabase db push` followed by `supabase db seed`. Both
+migrations are idempotent, and the seed uses `on conflict do nothing`, so
+re-running them on a live project never overwrites operator edits or destroys
+data. Confirm RLS is enabled on every table, Realtime publishes the five tables
+(`incidents`, `tickets`, `notifications`, `announcements`, `incident_types`), and
+`incident-photos` is private. Enable Auth email confirmation and configure SMTP
+for production.
+
+`supabase db seed` writes configuration and vocabulary only. Verify afterwards
+that the operational tables are empty:
+
+```sql
+select 'incidents' t, count(*) from public.incidents
+union all select 'tickets', count(*) from public.tickets
+union all select 'responders', count(*) from public.responders
+union all select 'notifications', count(*) from public.notifications
+union all select 'announcements', count(*) from public.announcements
+union all select 'system_logs', count(*) from public.system_logs;
+-- every row must return 0
+```
+
+Create the first account in Supabase Auth, then promote it:
+
+```sql
+update public.users set role = 'admin' where email = 'you@example.com';
+```
 
 ## Firebase Cloud Messaging
 
@@ -20,7 +49,7 @@ The FCM server key stays server-only. Delivery workers must use a server-side Fi
 
 ## Google Maps
 
-Create separate restricted browser and server keys. Restrict the browser key to the deployed host and Maps JavaScript API; restrict server keys to Geocoding/Places/Directions as needed. Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` only after restrictions are in place. The current map panel is a safe operational fallback until the key is configured.
+Create separate restricted browser and server keys. Restrict the browser key to the deployed host and Maps JavaScript API; restrict server keys to Geocoding/Places/Directions as needed. Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` only after restrictions are in place. Until it is set the map panel states that no map provider is configured; it never draws placeholder markers. The centre and zoom it uses once configured come from `system_settings`, not from the component source.
 
 ## Mobile builds (Android-only)
 
