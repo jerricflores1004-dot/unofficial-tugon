@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+html { min-width: 320px; }
+body { margin: 0; background: #e8edf3; color: #1e293b; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+::selection { background: #bfdbfe; color: #1e3a5f; }
+
+.dark body { background: #111827; color: #f8fafc; }
+
+@layer components {
+  .surface { @apply rounded-2xl border border-white/70 bg-surface shadow-neumorphic; }
+  .dark .surface { @apply border-slate-700/70 bg-[#1f2937] shadow-neumorphic-dark; }
+  .inset-control { @apply rounded-xl border border-slate-200/70 bg-[#e8edf3] shadow-inset outline-none transition-colors; }
+  .inset-control:focus { @apply border-blue ring-2 ring-blue/20; }
+  .dark .inset-control { @apply border-slate-700 bg-[#111827] shadow-none; }
+  .dark .inset-control:focus { @apply border-blue ring-blue/20; }
+  .muted { @apply text-slate-500; }
+  .dark .muted { @apply text-slate-400; }
+  .focus-ring { @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue focus-visible:ring-offset-2 focus-visible:ring-offset-[#e8edf3]; }
+  .dark .focus-ring { @apply focus-visible:ring-blue focus-visible:ring-offset-[#111827]; }
+}
+
+/* Accessible, quiet motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+@keyframes pulse-subtle { 0%, 100% { opacity: .72 } 50% { opacity: 1 } }
+.status-pulse { animation: pulse-subtle 2.4s ease-in-out infinite; }

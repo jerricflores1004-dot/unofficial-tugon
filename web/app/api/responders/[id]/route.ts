@@ -1,0 +1,4 @@
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { requireRole, badRequest } from '@/lib/server-auth';
+export async function PATCH(request: Request, { params }: { params: { id: string } }) { const auth = await requireRole(['staff', 'admin']); if ('error' in auth) return auth.error; const parsed = z.object({ availability: z.enum(['available', 'deployed', 'standby', 'offline']).optional(), currentLocation: z.string().max(240).optional() }).safeParse(await request.json()); if (!parsed.success) return badRequest('Invalid responder update.'); const { data, error } = await auth.supabase.from('responders').update({ availability: parsed.data.availability, current_location: parsed.data.currentLocation }).eq('id', params.id).select().single(); if (error) return badRequest('Unable to update responder.', 500); return NextResponse.json({ data }); }
