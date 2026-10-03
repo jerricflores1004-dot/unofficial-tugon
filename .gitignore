@@ -10,3 +10,12 @@ build/
 *.log
 .DS_Store
 coverage/
+
+# Local Android Firebase configuration and release signing files.
+/mobile/**/google-services.json
+/mobile/**/key.properties
+/mobile/**/*.jks
+/mobile/**/*.keystore
+/mobile/**/*.p12
+/mobile/**/*.pem
+/mobile/**/*.key
