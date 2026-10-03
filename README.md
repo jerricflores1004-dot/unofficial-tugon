@@ -53,15 +53,15 @@ npm run build
 npm run lint
 ```
 
-For Flutter:
+For the Android-only Flutter resident app, Android Studio on Windows is supported. Follow the mobile setup in `docs/deployment-guide.md` first, then run these checks from PowerShell:
 
-```bash
+```powershell
 cd mobile
-cp .env.example .env
-flutter pub get
 flutter analyze
 flutter test
-flutter run
+# Start an Android emulator or connect an Android device, then find its ID.
+flutter devices
+flutter run -d YOUR_ANDROID_DEVICE_ID
 ```
 
-See `docs/deployment-guide.md` for Vercel, Firebase Cloud Messaging, Google Maps, Android, and iOS setup.
+See `docs/deployment-guide.md` for Vercel, Firebase Cloud Messaging, Google Maps, and Android setup and release builds.
