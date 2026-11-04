@@ -9,8 +9,8 @@
 ## Request flow
 
 1. Supabase Auth establishes the session.
-2. `public.users` is provisioned by the `on_auth_user_created` trigger.
-3. Web handlers call `requireRole`, then query through the user session so RLS is always applied. Resident incident creation is restricted to `reporter_id = auth.uid()`.
+2. `public.users` is provisioned by the `on_auth_user_created` trigger. Staff profiles may additionally carry a responder agency (`bfp`, `pnp`, `coast_guard`, `mdrrmo`) and, for MDRRMO accounts, a field team (`alpha`, `bravo`, `charlie`), set by the system administrator through the users API.
+3. Web handlers call `requireRole`, then query through the user session so RLS is always applied. Resident incident creation is restricted to `reporter_id = auth.uid()`. The `/api/auth/responder-login` handler signs a responder in with email and password and authorises the session only when the profile's agency and team match the agency and team chosen at sign in.
 4. An incident insert runs the deterministic priority trigger and creates its server-side ticket number in the same database transaction.
 5. Realtime broadcasts incident, ticket, notification, and announcement changes to authorized subscriptions.
 6. Photo uploads are streamed to the private Storage bucket and only metadata is stored in PostgreSQL.

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Role } from './types';
+import type { Role, ResponderAgency, ResponderTeam } from './types';
 import { createServerSupabase } from './supabase-server';
 
 export type Profile = {
@@ -8,6 +8,8 @@ export type Profile = {
   email: string | null;
   full_name: string;
   role: Role;
+  agency: ResponderAgency | null;
+  team: ResponderTeam | null;
   barangay: string | null;
   is_active: boolean;
 };
@@ -38,7 +40,7 @@ export async function requireRole(roles: Role[] = []): Promise<AuthFailure | Aut
 
   const { data: profile, error: profileError } = await supabase
     .from('users')
-    .select('id, email, full_name, role, barangay, is_active')
+    .select('id, email, full_name, role, agency, team, barangay, is_active')
     .eq('id', user.id)
     .maybeSingle();
   if (profileError || !profile || !profile.is_active) {

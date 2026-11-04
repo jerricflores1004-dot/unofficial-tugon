@@ -10,7 +10,7 @@ import {
 import { createClient, isSupabaseConfigured } from '@/lib/supabase';
 import { sendResource } from '@/lib/api-client';
 import { useApi } from '@/lib/use-api';
-import { initials, roleLabel } from '@/lib/mappers';
+import { initials, roleLabel, agencyLabel, teamLabel } from '@/lib/mappers';
 import type { WorkspaceSummary } from '@/lib/types';
 
 type NavEntry = { label: string; href: string; icon: LucideIcon; badge?: number };
@@ -127,7 +127,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
         </div>}
         <div className={`flex items-center gap-3 rounded-xl border border-white/80 bg-white/45 p-2 dark:border-slate-700 dark:bg-slate-800/70 ${collapsed ? 'justify-center' : ''}`}>
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-navy text-xs font-bold text-white">{initials(displayName)}</span>
-          {!collapsed && <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-slate-800 dark:text-slate-100">{displayName}</p><p className="text-[10px] text-slate-500 dark:text-slate-400">{roleLabel(profile?.role ?? null)}</p></div>}
+          {!collapsed && <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-slate-800 dark:text-slate-100">{displayName}</p><p className="text-[10px] text-slate-500 dark:text-slate-400">{roleLabel(profile?.role ?? null)}{profile?.agency ? ` · ${agencyLabel(profile.agency)}${profile.team ? ` (${teamLabel(profile.team)})` : ''}` : ''}</p></div>}
           {!collapsed && <button onClick={signOut} title="Sign out" className="focus-ring rounded-md p-1.5 text-slate-400 hover:text-emergency" aria-label="Sign out"><LogOut size={15} /></button>}
         </div>
       </div>
@@ -160,6 +160,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
                 <p className="truncate text-xs font-bold text-slate-800 dark:text-slate-100">{displayName}</p>
                 <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">{profile?.email || 'Email unavailable'}</p>
                 <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-blue">{roleLabel(profile?.role ?? null)}</p>
+                {profile?.agency && <p className="mt-1 text-[11px] text-slate-500">{agencyLabel(profile.agency)}{profile.team ? ` · ${teamLabel(profile.team)}` : ''}</p>}
                 {profile?.barangay && <p className="mt-1 text-[11px] text-slate-500">Barangay: {profile.barangay}</p>}
                 <button onClick={signOut} className="mt-3 flex w-full items-center gap-2 rounded-xl bg-white/70 px-3 py-2 text-xs font-bold text-emergency hover:bg-white dark:bg-slate-800/70 dark:hover:bg-slate-800"><LogOut size={14} /> Sign out</button>
               </div>
