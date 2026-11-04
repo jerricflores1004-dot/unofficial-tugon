@@ -16,6 +16,7 @@ Roles: `resident`, `staff`, `department_head`, `admin`. "Staff" below means
 | --- | --- | --- |
 | `POST` | `/api/auth/register` | Resident registration (`email`, `password`, `fullName`, optional `phone`). The `handle_new_auth_user` trigger creates the `public.users` row. |
 | `POST` | `/api/auth/login` | Sign in (`email`, `password`). |
+| `POST` | `/api/auth/responder-login` | Responder sign in (`email`, `password`, `agency`, `team`). `team` (`alpha`, `bravo`, or `charlie`) is required for `agency: "mdrrmo"` and must be absent for the other agencies. The profile must be active and registered under the same agency; MDRRMO profiles must also match the field team, while other agencies must carry no team. |
 | `POST` | `/api/auth/logout` | Clears the session cookie. |
 | `POST` | `/api/auth/reset-password` | Sends a Supabase recovery email (`email`). |
 
@@ -95,7 +96,7 @@ return genuine zeros.
 | Method | Path | Notes |
 | --- | --- | --- |
 | `GET`, `PATCH` | `/api/settings` | `system_settings`. Reads for authenticated users; writes are admin-only. |
-| `GET`, `POST` | `/api/users` | Admin. |
-| `PATCH`, `DELETE` | `/api/users/:id` | Admin role/access changes. |
+| `GET`, `POST` | `/api/users` | Admin. Create accepts optional `agency` and `team` (`team` only with `agency: "mdrrmo"`). |
+| `PATCH`, `DELETE` | `/api/users/:id` | Admin role/access changes, including `agency` and `team` (a field team is only valid on MDRRMO profiles; changing agency resets the team). |
 | `GET` | `/api/logs` | Admin. `system_logs` audit trail written by triggers. |
 | `GET`, `POST` | `/api/feedback` | Resident rating of a resolved incident. |
