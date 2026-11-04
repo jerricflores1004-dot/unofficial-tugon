@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { badRequest, requireRole } from '@/lib/server-auth';
 import { createAdminClient } from '@/lib/supabase-admin';
 
-const SELECT = 'id, email, full_name, role, barangay, is_active, created_at';
+const SELECT = 'id, email, full_name, role, agency, team, barangay, is_active, created_at';
 
 export async function GET() {
   const auth = await requireRole(['admin']);
@@ -20,6 +20,8 @@ export async function POST(request: Request) {
     email: z.string().email(),
     fullName: z.string().min(2).max(120),
     role: z.enum(['resident', 'staff', 'admin', 'department_head']),
+    agency: z.enum(['bfp', 'pnp', 'coast_guard', 'mdrrmo']).nullable().optional(),
+    team: z.enum(['alpha', 'bravo', 'charlie']).nullable().optional(),
     barangay: z.string().max(100).nullable().optional(),
   }).safeParse(await request.json().catch(() => null));
   if (!parsed.success) return badRequest('Invalid user details.');
@@ -38,6 +40,8 @@ export async function POST(request: Request) {
   const { data, error } = await admin.from('users').update({
     full_name: parsed.data.fullName,
     role: parsed.data.role,
+    agency: parsed.data.agency ?? null,
+    team: parsed.data.team ?? null,
     barangay: parsed.data.barangay ?? null,
   }).eq('id', created.user.id).select(SELECT).single();
   if (error) return badRequest('User was created but profile setup failed. Review the audit log.', 500);

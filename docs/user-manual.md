@@ -20,6 +20,7 @@
 - **Staff:** verify incidents, manage tickets/responders, view map, send notifications.
 - **Admin:** users, role/access, settings, logs, monitoring and backup administration.
 - **Department head:** analytics, announcements, feedback, departmental reports and oversight.
+- **Responder agencies:** staff profiles can be registered under an responder agency — **BFP** (Bureau of Fire Protection), **PNP** (Philippine National Police), **Philippine Coast Guard**, or **MDRRMO Mabini** with a field team (**Alpha**, **Bravo**, **Charlie**). Agency and team are assigned by the system administrator, and responders sign in through the "Responder sign in" option on the login page, which checks the profile matches the chosen agency and team.
 
 ## Resident mobile workflow
 

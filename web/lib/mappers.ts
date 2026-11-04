@@ -2,7 +2,7 @@ import { format, parseISO } from 'date-fns';
 import type {
   Announcement, AppNotification, AuditLog, FeedbackItem, Incident, IncidentPhoto, IncidentStatus,
   IncidentType, IncidentUpdate, Priority, PrioritySlice, Responder, ResponderAvailability,
-  ResponseTimePoint, Severity, SystemSetting, Ticket, TicketStatus, TrendPoint, UserRecord, BarangayStat,
+  ResponseTimePoint, ResponderAgency, ResponderTeam, Severity, SystemSetting, Ticket, TicketStatus, TrendPoint, UserRecord, BarangayStat,
 } from './types';
 
 /** Defensive coercion helpers: the database is the only source, but rows may be sparse. */
@@ -190,6 +190,9 @@ export function mapAuditLog(row: Row): AuditLog {
   };
 }
 
+const AGENCIES: ResponderAgency[] = ['bfp', 'pnp', 'coast_guard', 'mdrrmo'];
+const TEAMS: ResponderTeam[] = ['alpha', 'bravo', 'charlie'];
+
 export function mapUser(row: Row): UserRecord {
   const roles = ['resident', 'staff', 'admin', 'department_head'];
   return {
@@ -197,10 +200,31 @@ export function mapUser(row: Row): UserRecord {
     email: text(row.email),
     full_name: text(row.full_name, 'Unnamed user'),
     role: (roles.includes(row.role) ? row.role : 'resident') as UserRecord['role'],
+    agency: (AGENCIES.includes(row.agency) ? row.agency : null) as UserRecord['agency'],
+    team: (TEAMS.includes(row.team) ? row.team : null) as UserRecord['team'],
     barangay: nullableText(row.barangay),
     is_active: row.is_active !== false,
     created_at: text(row.created_at),
   };
+}
+
+export function agencyLabel(agency: ResponderAgency | null): string {
+  switch (agency) {
+    case 'bfp': return 'Bureau of Fire Protection';
+    case 'pnp': return 'Philippine National Police';
+    case 'coast_guard': return 'Philippine Coast Guard';
+    case 'mdrrmo': return 'MDRRMO Mabini';
+    default: return '—';
+  }
+}
+
+export function teamLabel(team: ResponderTeam | null): string {
+  switch (team) {
+    case 'alpha': return 'Team Alpha';
+    case 'bravo': return 'Team Bravo';
+    case 'charlie': return 'Team Charlie';
+    default: return '—';
+  }
 }
 
 export function mapIncidentType(row: Row): IncidentType {

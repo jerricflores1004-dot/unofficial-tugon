@@ -1,4 +1,6 @@
 export type Role = 'resident' | 'staff' | 'admin' | 'department_head';
+export type ResponderAgency = 'bfp' | 'pnp' | 'coast_guard' | 'mdrrmo';
+export type ResponderTeam = 'alpha' | 'bravo' | 'charlie';
 export type IncidentStatus = 'pending' | 'verified' | 'responding' | 'resolved' | 'closed' | 'rejected';
 export type Priority = 'critical' | 'high' | 'medium' | 'low';
 export type Severity = 'critical' | 'high' | 'medium' | 'low';
@@ -112,6 +114,8 @@ export type UserRecord = {
   email: string;
   full_name: string;
   role: Role;
+  agency: ResponderAgency | null;
+  team: ResponderTeam | null;
   barangay: string | null;
   is_active: boolean;
   created_at: string;
@@ -175,7 +179,7 @@ export type Pulse = {
   notifications_unread: number;
 };
 
-export type Profile = { id: string; email: string; full_name: string; role: Role; barangay: string | null; is_active: boolean };
+export type Profile = { id: string; email: string; full_name: string; role: Role; agency: ResponderAgency | null; team: ResponderTeam | null; barangay: string | null; is_active: boolean };
 
 export type Integrations = { database: boolean; realtime: boolean; storage: boolean; push: boolean; maps: boolean };
 

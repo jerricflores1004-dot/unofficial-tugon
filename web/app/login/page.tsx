@@ -2,18 +2,37 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowRight, Database, Eye, EyeOff, LockKeyhole, Mail, Phone, Shield, TriangleAlert, User } from 'lucide-react';
+import { ArrowRight, Database, Eye, EyeOff, LockKeyhole, Mail, Phone, Shield, TriangleAlert, User, Users } from 'lucide-react';
 import { Button, Spinner } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { describeError, request } from '@/lib/api-client';
 
-type Mode = 'signin' | 'register' | 'reset';
+type Mode = 'signin' | 'register' | 'reset' | 'responder';
 
-const TITLES: Record<Mode, string> = { signin: 'Welcome back', register: 'Create your account', reset: 'Reset your password' };
+const AGENCIES: { value: 'bfp' | 'pnp' | 'coast_guard' | 'mdrrmo'; label: string }[] = [
+  { value: 'bfp', label: 'Bureau of Fire Protection (BFP)' },
+  { value: 'pnp', label: 'Philippine National Police (PNP)' },
+  { value: 'coast_guard', label: 'Philippine Coast Guard' },
+  { value: 'mdrrmo', label: 'MDRRMO Mabini' },
+];
+
+const TEAMS: { value: 'alpha' | 'bravo' | 'charlie'; label: string }[] = [
+  { value: 'alpha', label: 'Team Alpha' },
+  { value: 'bravo', label: 'Team Bravo' },
+  { value: 'charlie', label: 'Team Charlie' },
+];
+
+const TITLES: Record<Mode, string> = {
+  signin: 'Welcome back',
+  register: 'Create your account',
+  reset: 'Reset your password',
+  responder: 'Responder sign in',
+};
 const SUBTITLES: Record<Mode, string> = {
   signin: 'Sign in to continue to your response workspace.',
   register: 'Register with your name and email. Staff roles are assigned by the TUGON system administrator.',
   reset: 'Supabase Auth will email you a reset link.',
+  responder: 'Sign in as BFP, PNP, Coast Guard, or MDRRMO Team Alpha, Bravo, or Charlie.',
 };
 
 export default function LoginPage() {
@@ -23,6 +42,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [agency, setAgency] = useState<'bfp' | 'pnp' | 'coast_guard' | 'mdrrmo' | ''>('');
+  const [team, setTeam] = useState<'alpha' | 'bravo' | 'charlie' | ''>('');
 
   function switchMode(next: Mode) {
     setMode(next);
@@ -36,6 +57,22 @@ export default function LoginPage() {
     setError('');
     try {
       await request('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+      router.replace('/dashboard');
+      router.refresh();
+    } catch (cause) {
+      setError(describeError(cause));
+      setLoading(false);
+    }
+  }
+
+  async function signInResponder(input: { email: string; password: string; agency: string; team: string | null }) {
+    setLoading(true);
+    setError('');
+    try {
+      await request<{ profile: unknown }>('/api/auth/responder-login', {
+        method: 'POST',
+        body: JSON.stringify({ email: input.email, password: input.password, agency: input.agency, team: input.team }),
+      });
       router.replace('/dashboard');
       router.refresh();
     } catch (cause) {
@@ -103,6 +140,13 @@ export default function LoginPage() {
       });
       return;
     }
+    if (mode === 'responder') {
+      const password = String(data.get('password') ?? '');
+      if (!agency) { setError('Select your responder agency.'); return; }
+      if (agency === 'mdrrmo' && !team) { setError('Select your MDRRMO field team.'); return; }
+      void signInResponder({ email, password, agency, team: agency === 'mdrrmo' ? team : null });
+      return;
+    }
     void signIn(email, String(data.get('password') ?? ''));
   }
 
@@ -163,6 +207,39 @@ export default function LoginPage() {
               </div>
             </label>
 
+            {mode === 'responder' && <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Responder agency
+              <div className="inset-control mt-2 flex items-center gap-2 px-3">
+                <Shield size={17} className="text-slate-400" />
+                <select required name="agency" autoComplete="off" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" value={agency} onChange={(event) => setAgency(event.target.value as 'bfp' | 'pnp' | 'coast_guard' | 'mdrrmo')}>
+                  <option value="">Select agency</option>
+                  {AGENCIES.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+            </label>}
+
+            {mode === 'responder' && <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Field team {agency === 'mdrrmo' ? <span className="font-normal text-slate-400">(required)</span> : <span className="font-normal text-slate-400">(not used)</span>}
+              <div className="inset-control mt-2 flex items-center gap-2 px-3">
+                <Users size={17} className="text-slate-400" />
+                <select
+                  required={agency === 'mdrrmo'}
+                  disabled={agency !== 'mdrrmo'}
+                  name="team"
+                  autoComplete="off"
+                  className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white"
+                  value={team}
+                  onChange={(event) => setTeam(event.target.value as 'alpha' | 'bravo' | 'charlie')}
+                >
+                  <option value="">Select team</option>
+                  {TEAMS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                {agency !== 'mdrrmo' && <span className="text-xs text-slate-400">MDRRMO field teams only</span>}
+              </div>
+            </label>}
+
             {isRegister && <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Phone <span className="font-normal text-slate-400">(optional)</span>
               <div className="inset-control mt-2 flex items-center gap-2 px-3">
                 <Phone size={17} className="text-slate-400" />
@@ -212,8 +289,20 @@ export default function LoginPage() {
               {isRegister ? 'Sign in' : 'Create an account'}
             </button>
           </p>}
+          {mode === 'signin' && <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
+            Signing in as a responder?{' '}
+            <button type="button" onClick={() => switchMode('responder')} className="font-bold text-blue hover:underline">
+              Responder sign in (BFP · PNP · Coast Guard · MDRRMO)
+            </button>
+          </p>}
+          {mode === 'responder' && <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
+            Municipal staff sign in{' '}
+            <button type="button" onClick={() => switchMode('signin')} className="font-bold text-blue hover:underline">
+              here
+            </button>
+          </p>}
 
-          <p className="mt-10 text-center text-[11px] text-slate-400">{isRegister ? 'Staff access is granted by the TUGON system administrator.' : 'Need access? Contact the TUGON system administrator.'}</p>
+          <p className="mt-10 text-center text-[11px] text-slate-400">{isRegister ? 'Staff access is granted by the TUGON system administrator.' : mode === 'responder' ? 'Responder profiles are created by the TUGON system administrator.' : 'Need access? Contact the TUGON system administrator.'}</p>
         </div>
       </section>
     </div>
