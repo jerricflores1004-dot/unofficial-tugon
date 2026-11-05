@@ -53,7 +53,7 @@ class TugonApi {
         .or('user_id.eq.$_userId,user_id.is.null')
         .order('created_at', ascending: false)
         .limit(50);
-    return (response as List)
+    return response
         .map((item) => ResidentNotification.fromJson(
               Map<String, dynamic>.from(item as Map),
               isPersonal: (item as Map)['user_id'] == _userId,
@@ -76,7 +76,7 @@ class TugonApi {
         .eq('user_id', _userId)
         .isFilter('read_at', null)
         .select('id');
-    return (response as List).length;
+    return response.length;
   }
 
   /// Published, non-expired announcements written by the operations workspace.

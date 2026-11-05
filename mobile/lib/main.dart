@@ -1,3 +1,5 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,7 @@ import 'core/api.dart';
 import 'core/models.dart';
 import 'core/offline_queue.dart';
 import 'core/theme.dart';
+import 'package:flutter/foundation.dart';
 
 final supabaseProvider = Provider<SupabaseClient>((ref) => Supabase.instance.client);
 final apiProvider = Provider<TugonApi>((ref) => TugonApi(ref.watch(supabaseProvider)));
@@ -30,12 +33,122 @@ final photoLimitProvider = FutureProvider.autoDispose(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env');
-  await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL']!,
-    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
-  );
-  runApp(const ProviderScope(child: TugonApp()));
+
+  try {
+    debugPrint('STEP 1: Loading environment');
+
+    const defineUrl = String.fromEnvironment('SUPABASE_URL');
+    const defineKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+
+    late String supabaseUrl;
+    late String supabaseKey;
+
+    if (kIsWeb) {
+      supabaseUrl = defineUrl.trim();
+      supabaseKey = defineKey.trim();
+    } else {
+      await dotenv.load(fileName: '.env');
+
+      supabaseUrl = (defineUrl.isNotEmpty
+          ? defineUrl
+          : dotenv.env['SUPABASE_URL'] ?? '')
+          .trim();
+
+      supabaseKey = (defineKey.isNotEmpty
+          ? defineKey
+          : dotenv.env['SUPABASE_ANON_KEY'] ?? '')
+          .trim();
+    }
+
+    debugPrint('SUPABASE URL RAW: [$supabaseUrl]');
+    debugPrint('SUPABASE URL LENGTH: ${supabaseUrl.length}');
+    debugPrint('SUPABASE URL CODE UNITS: ${supabaseUrl.codeUnits}');
+    debugPrint('SUPABASE KEY LENGTH: ${supabaseKey.length}');
+
+    if (supabaseUrl.isEmpty || supabaseKey.isEmpty) {
+      throw Exception(
+        'Missing Supabase configuration. '
+            'Check SUPABASE_URL and SUPABASE_ANON_KEY.',
+      );
+    }
+
+    debugPrint('STEP 2: Checking Supabase configuration');
+
+    debugPrint('URL exists: ${supabaseUrl.isNotEmpty}');
+    debugPrint('KEY exists: ${supabaseKey.isNotEmpty}');
+
+    debugPrint('RAW SUPABASE URL: [$supabaseUrl]');
+    debugPrint('RAW URL LENGTH: ${supabaseUrl.length}');
+
+    final parsedUrl = Uri.tryParse(supabaseUrl);
+
+    debugPrint('URL valid: ${parsedUrl != null && parsedUrl.hasAuthority}');
+    debugPrint('URL scheme: ${parsedUrl?.scheme}');
+    debugPrint('URL host: ${parsedUrl?.host}');
+
+    if (supabaseUrl.isEmpty || supabaseKey.isEmpty) {
+      throw Exception('Supabase URL or key is missing.');
+    }
+
+    if (parsedUrl == null ||
+        parsedUrl.scheme != 'https' ||
+        parsedUrl.host.isEmpty) {
+      throw Exception('Supabase URL is invalid.');
+    }
+
+    debugPrint('STEP 2.1: Starting Supabase SDK');
+
+    try {
+      debugPrint('SUPABASE URL: $supabaseUrl');
+      debugPrint('SUPABASE KEY LENGTH: ${supabaseKey.length}');
+      debugPrint('SUPABASE URL HOST: ${Uri.parse(supabaseUrl).host}');
+
+      await Supabase.initialize(
+        url: supabaseUrl,
+        publishableKey: supabaseKey,
+      );
+
+      debugPrint('SUPABASE INITIALIZATION SUCCESS!');
+    } catch (e, stack) {
+      debugPrint('SUPABASE INITIALIZATION FAILED: $e');
+      debugPrint('ERROR TYPE: ${e.runtimeType}');
+      debugPrintStack(stackTrace: stack);
+      rethrow;
+    } catch (e, stack) {
+      debugPrint('SUPABASE SDK ERROR: $e');
+      debugPrintStack(stackTrace: stack);
+      rethrow;
+    }
+
+    debugPrint('STEP 3: Initializing Firebase');
+
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+
+    debugPrint('STEP 4: Running application');
+
+    runApp(const ProviderScope(child: TugonApp()));
+  } catch (e, stack) {
+    debugPrint('STARTUP ERROR: $e');
+    debugPrintStack(stackTrace: stack);
+
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'TUGON startup error:\n$e',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class TugonApp extends ConsumerWidget {
@@ -103,7 +216,7 @@ class LogoMark extends StatelessWidget {
                 color: TugonColors.navy, borderRadius: BorderRadius.circular(13)),
             child: const Icon(Icons.shield_outlined, color: Colors.white)),
         const SizedBox(width: 10),
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+        const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('TUGON',
               style: TextStyle(
                   fontSize: 18,
@@ -129,29 +242,71 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final email = TextEditingController();
   final password = TextEditingController();
+  final fullName = TextEditingController();
+  bool isSignUp = false;
   bool loading = false;
   String? error;
+  String? info;
 
   @override
   void dispose() {
     email.dispose();
     password.dispose();
+    fullName.dispose();
     super.dispose();
   }
 
-  Future<void> signIn() async {
+  Future<void> submitAuth() async {
+    final emailText = email.text.trim();
+    final passwordText = password.text;
+    final nameText = fullName.text.trim();
+
+    if (emailText.isEmpty || passwordText.isEmpty) {
+      setState(() => error = 'Please enter your email address and password.');
+      return;
+    }
+
+    if (isSignUp && nameText.isEmpty) {
+      setState(() => error = 'Please enter your full name to register.');
+      return;
+    }
+
     setState(() {
       loading = true;
       error = null;
+      info = null;
     });
+
     try {
-      await Supabase.instance.client.auth
-          .signInWithPassword(email: email.text.trim(), password: password.text);
+      if (isSignUp) {
+        final response = await Supabase.instance.client.auth.signUp(
+          email: emailText,
+          password: passwordText,
+          emailRedirectTo: kIsWeb
+              ? 'https://unofficial-tugon.vercel.app'
+              : null,
+          data: {
+            'full_name': nameText,
+          },
+        );
+        if (mounted) {
+          if (response.session != null) {
+            setState(() => info = 'Account created and signed in successfully!');
+          } else {
+            setState(() => info = 'Account created! If email confirmation is enabled, please check your inbox.');
+          }
+        }
+      } else {
+        await Supabase.instance.client.auth.signInWithPassword(
+          email: emailText,
+          password: passwordText,
+        );
+      }
     } on AuthException catch (e) {
       if (mounted) setState(() => error = e.message);
     } catch (_) {
       if (mounted) {
-        setState(() => error = 'Unable to reach the authentication service.');
+        setState(() => error = 'Unable to reach the authentication service. Please check your network or configuration.');
       }
     } finally {
       if (mounted) setState(() => loading = false);
@@ -171,14 +326,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           children: [
                             const LogoMark(large: true),
                             const SizedBox(height: 52),
-                            const Text('Welcome back',
-                                style: TextStyle(
+                            Text(isSignUp ? 'Create account' : 'Welcome back',
+                                style: const TextStyle(
                                     fontSize: 30,
                                     fontWeight: FontWeight.w800,
                                     color: TugonColors.navy)),
                             const SizedBox(height: 8),
-                            const Text('Sign in to report and track incidents in Mabini.',
-                                style: TextStyle(color: TugonColors.muted)),
+                            Text(
+                                isSignUp
+                                    ? 'Sign up to report and track incidents in Mabini.'
+                                    : 'Sign in to report and track incidents in Mabini.',
+                                style: const TextStyle(color: TugonColors.muted)),
                             const SizedBox(height: 32),
                             if (error != null)
                               Container(
@@ -191,6 +349,25 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: Text(error!,
                                       style: const TextStyle(
                                           color: TugonColors.emergency, fontSize: 12))),
+                            if (info != null)
+                              Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  margin: const EdgeInsets.only(bottom: 16),
+                                  decoration: BoxDecoration(
+                                      color: const Color(0xFFECFDF5),
+                                      borderRadius: BorderRadius.circular(12)),
+                                  child: Text(info!,
+                                      style: const TextStyle(
+                                          color: TugonColors.success, fontSize: 12))),
+                            if (isSignUp) ...[
+                              TextField(
+                                  controller: fullName,
+                                  decoration: const InputDecoration(
+                                      labelText: 'Full name',
+                                      prefixIcon: Icon(Icons.person_outline))),
+                              const SizedBox(height: 14),
+                            ],
                             TextField(
                                 controller: email,
                                 keyboardType: TextInputType.emailAddress,
@@ -209,20 +386,26 @@ class _LoginScreenState extends State<LoginScreen> {
                                 width: double.infinity,
                                 height: 54,
                                 child: FilledButton(
-                                    onPressed: loading ? null : signIn,
+                                    onPressed: loading ? null : submitAuth,
                                     style: FilledButton.styleFrom(
                                         backgroundColor: TugonColors.blue,
                                         shape: RoundedRectangleBorder(
                                             borderRadius: BorderRadius.circular(12))),
                                     child: loading
                                         ? const CircularProgressIndicator(color: Colors.white)
-                                        : const Text('Sign in',
-                                            style: TextStyle(fontWeight: FontWeight.w700)))),
+                                        : Text(isSignUp ? 'Sign up' : 'Sign in',
+                                            style: const TextStyle(fontWeight: FontWeight.w700)))),
                             const SizedBox(height: 18),
                             Center(
                                 child: TextButton(
-                                    onPressed: () {},
-                                    child: const Text('Forgot password?')))
+                                    onPressed: () => setState(() {
+                                          isSignUp = !isSignUp;
+                                          error = null;
+                                          info = null;
+                                        }),
+                                    child: Text(isSignUp
+                                        ? 'Already have an account? Sign in'
+                                        : "Don't have an account? Sign up")))
                           ]))))));
 }
 
@@ -593,6 +776,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
           photoWarning = true;
         }
       }
+      if (!mounted) return;
       ref.invalidate(incidentsProvider);
       ref.invalidate(queuedReportsProvider);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -758,7 +942,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
       selectedType = items.first.label;
     }
     return DropdownButtonFormField<String>(
-        value: selectedType,
+        initialValue: selectedType,
         decoration: const InputDecoration(labelText: 'Incident type'),
         items: items
             .map((item) =>

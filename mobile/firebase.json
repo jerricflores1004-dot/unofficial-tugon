@@ -1,0 +1,37 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "tugon-41aff",
+          "appId": "1:636103010474:android:89f3f8aef6dd65baff08d3",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "tugon-41aff",
+          "configurations": {
+            "android": "1:636103010474:android:89f3f8aef6dd65baff08d3",
+            "web": "1:636103010474:web:777d0d5079142709ff08d3",
+            "windows": "1:636103010474:web:093ebb9cf12f4d5eff08d3"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

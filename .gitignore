@@ -34,3 +34,16 @@ mobile/android/.gradle/
 
 # Windows generated files
 mobile/windows/flutter/ephemeral/
+
+# Firebase local cache and deployment artifacts
+.firebase/
+**/.firebase/
+
+# Firebase debug logs
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Environment files
+.env.*
+!.env.example

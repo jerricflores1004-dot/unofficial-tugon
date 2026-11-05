@@ -1,11 +1,16 @@
 {
   "name": "tugon-disaster-response",
   "private": true,
-  "workspaces": ["web"],
+  "workspaces": [
+    "web"
+  ],
   "scripts": {
     "dev": "npm --workspace web run dev",
     "build": "npm --workspace web run build",
     "lint": "npm --workspace web run lint",
     "test": "npm --workspace web run test"
+  },
+  "dependencies": {
+    "firebase": "^13.2.0"
   }
 }
