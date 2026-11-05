@@ -19,3 +19,18 @@ coverage/
 /mobile/**/*.p12
 /mobile/**/*.pem
 /mobile/**/*.key
+
+# IDE
+.idea/
+*.iml
+
+# Flutter generated files
+.flutter-plugins-dependencies
+.dart_tool/
+build/
+
+# Android generated files
+mobile/android/.gradle/
+
+# Windows generated files
+mobile/windows/flutter/ephemeral/
