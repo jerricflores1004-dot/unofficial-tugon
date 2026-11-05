@@ -1,7 +1,6 @@
 
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
 
 export async function createServerSupabase() {
   const cookieStore = await cookies();
@@ -27,8 +26,8 @@ export async function createServerSupabase() {
         try {
           cookieStore.set(name, value, options);
         } catch {
-          // Cookie updates may not be available in Server Components.
-          // Middleware should handle session refresh when applicable.
+          // Server Components cannot always modify cookies.
+          // Middleware can handle session refresh.
         }
       },
 
@@ -42,7 +41,7 @@ export async function createServerSupabase() {
             maxAge: 0,
           });
         } catch {
-          // Cookie updates may not be available in Server Components.
+          // Cookie updates may not be available here.
         }
       },
     },

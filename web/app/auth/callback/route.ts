@@ -1,52 +1,48 @@
+
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 export async function GET(request: Request) {
-  const requestUrl = new URL(request.url);
-  const code = requestUrl.searchParams.get('code');
+  const { searchParams, origin } = new URL(request.url);
+  const code = searchParams.get('code');
+  const next = searchParams.get('next') ?? '/';
 
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    requestUrl.origin;
+  const cookieStore = await cookies();
 
-  if (!code) {
-    return NextResponse.redirect(
-      new URL('/login?error=missing_confirmation_code', siteUrl)
-    );
-  }
-
-  const cookieStore = cookies();
+  let response = NextResponse.redirect(new URL(next, origin));
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
     return NextResponse.redirect(
-      new URL('/login?error=auth_not_configured', siteUrl)
+      new URL('/login?error=configuration', origin)
     );
   }
-
-  const response = NextResponse.redirect(
-    new URL('/dashboard', siteUrl)
-  );
 
   const supabase = createServerClient(
     supabaseUrl,
     supabaseKey,
     {
       cookies: {
-        get(name: string) {
+        get(name: string): string | undefined {
           return cookieStore.get(name)?.value;
         },
 
-        set(name, value, options) {
+        set(
+          name: string,
+          value: string,
+          options: CookieOptions
+        ): void {
           cookieStore.set(name, value, options);
-
           response.cookies.set(name, value, options);
         },
 
-        remove(name, options) {
+        remove(
+          name: string,
+          options: CookieOptions
+        ): void {
           cookieStore.set(name, '', {
             ...options,
             maxAge: 0,
@@ -61,15 +57,14 @@ export async function GET(request: Request) {
     }
   );
 
-  const { error } =
-    await supabase.auth.exchangeCodeForSession(code);
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
 
-  if (error) {
-    console.error('Confirmation error:', error.message);
-
-    return NextResponse.redirect(
-      new URL('/login?error=confirmation_failed', siteUrl)
-    );
+    if (error) {
+      return NextResponse.redirect(
+        new URL('/login?error=auth', origin)
+      );
+    }
   }
 
   return response;
