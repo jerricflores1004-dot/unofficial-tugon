@@ -25,6 +25,9 @@ export async function POST(request: Request) {
     barangay: z.string().max(100).nullable().optional(),
   }).safeParse(await request.json().catch(() => null));
   if (!parsed.success) return badRequest('Invalid user details.');
+  if (parsed.data.team != null && parsed.data.agency !== 'mdrrmo') {
+    return badRequest('A field team can only be assigned to MDRRMO profiles.');
+  }
 
   const admin = createAdminClient();
   if (!admin) return badRequest('Server user provisioning is not configured.', 503);
@@ -41,7 +44,8 @@ export async function POST(request: Request) {
     full_name: parsed.data.fullName,
     role: parsed.data.role,
     agency: parsed.data.agency ?? null,
-    team: parsed.data.team ?? null,
+    // A field team is only meaningful for MDRRMO profiles.
+    team: parsed.data.agency === 'mdrrmo' ? (parsed.data.team ?? null) : null,
     barangay: parsed.data.barangay ?? null,
   }).eq('id', created.user.id).select(SELECT).single();
   if (error) return badRequest('User was created but profile setup failed. Review the audit log.', 500);

@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Database, FileClock, Gauge, HardDrive, LockKeyhole, Plus, Server, UserCog, Users, X, type LucideIcon } from 'lucide-react';
 import { describeError, sendResource } from '@/lib/api-client';
 import { useApi, useApiGroup } from '@/lib/use-api';
-import { mapAuditLog, mapUser } from '@/lib/mappers';
+import { mapAuditLog, mapUser, agencyLabel, teamLabel } from '@/lib/mappers';
 import { relativeTime } from '@/lib/format';
 import type { Pulse, UserRecord, WorkspaceSummary } from '@/lib/types';
 import { MiniStat } from './mini-stat';
@@ -46,13 +46,13 @@ export function AdminView() {
           <PanelHeader title="User administration" detail={data.loading ? 'Loading profiles…' : `${users.length} profiles provisioned by Supabase Auth`} action={<Button size="sm" onClick={() => setInviting(true)}><Plus size={14} /> Invite user</Button>} />
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[620px] text-left text-xs">
+          <table className="w-full min-w-[760px] text-left text-xs">
             <thead className="bg-slate-100/70 text-[10px] uppercase tracking-wider text-slate-400 dark:bg-slate-900/40">
-              <tr><th className="px-5 py-3">User</th><th className="px-3 py-3">Role</th><th className="px-3 py-3">Barangay</th><th className="px-3 py-3">Access</th><th className="px-5 py-3">Created</th></tr>
+              <tr><th className="px-5 py-3">User</th><th className="px-3 py-3">Role</th><th className="px-3 py-3">Responder agency</th><th className="px-3 py-3">Barangay</th><th className="px-3 py-3">Access</th><th className="px-5 py-3">Created</th></tr>
             </thead>
             <tbody className="divide-y divide-slate-200/70 dark:divide-slate-700/70">
               {data.loading && users.length === 0
-                ? [0, 1, 2].map((row) => <tr key={row}><td colSpan={5} className="px-5 py-3"><LoadingSkeleton className="h-9 w-full" /></td></tr>)
+                ? [0, 1, 2].map((row) => <tr key={row}><td colSpan={6} className="px-5 py-3"><LoadingSkeleton className="h-9 w-full" /></td></tr>)
                 : users.map((user) => <UserRow key={user.id} user={user} onChanged={() => { data.reload(); }} onToast={setToast} />)}
             </tbody>
           </table>
@@ -97,6 +97,21 @@ export function AdminView() {
 
 function buildLogsPath() { return '/api/logs?limit=50'; }
 
+const AGENCY_CHOICES: { value: UserRecord['agency']; label: string }[] = [
+  { value: null, label: 'No agency' },
+  { value: 'bfp', label: 'BFP' },
+  { value: 'pnp', label: 'PNP' },
+  { value: 'coast_guard', label: 'Coast Guard' },
+  { value: 'mdrrmo', label: 'MDRRMO Mabini' },
+];
+
+const TEAM_CHOICES: { value: UserRecord['team']; label: string }[] = [
+  { value: null, label: 'No team' },
+  { value: 'alpha', label: 'Team Alpha' },
+  { value: 'bravo', label: 'Team Bravo' },
+  { value: 'charlie', label: 'Team Charlie' },
+];
+
 function UserRow({ user, onChanged, onToast }: { user: UserRecord; onChanged: () => void; onToast: (message: string) => void }) {
   const [busy, setBusy] = useState(false);
   async function changeRole(role: UserRecord['role']) {
@@ -104,6 +119,24 @@ function UserRow({ user, onChanged, onToast }: { user: UserRecord; onChanged: ()
     try {
       await sendResource(`/api/users/${user.id}`, 'PATCH', { role });
       onToast(`${user.full_name} is now ${role.replace('_', ' ')}.`);
+      onChanged();
+    } catch (cause) { onToast(describeError(cause)); } finally { setBusy(false); }
+  }
+  async function changeAgency(agency: UserRecord['agency']) {
+    setBusy(true);
+    try {
+      await sendResource(`/api/users/${user.id}`, 'PATCH', { agency });
+      onToast(agency
+        ? `${user.full_name} is now registered under ${agencyLabel(agency)}${agency === 'mdrrmo' ? '. Assign a field team to finish.' : '.'}`
+        : `${user.full_name} no longer carries a responder agency.`);
+      onChanged();
+    } catch (cause) { onToast(describeError(cause)); } finally { setBusy(false); }
+  }
+  async function changeTeam(team: UserRecord['team']) {
+    setBusy(true);
+    try {
+      await sendResource(`/api/users/${user.id}`, 'PATCH', { agency: 'mdrrmo', team });
+      onToast(team ? `${user.full_name} is now on ${teamLabel(team)}.` : `${user.full_name} has no MDRRMO field team.`);
       onChanged();
     } catch (cause) { onToast(describeError(cause)); } finally { setBusy(false); }
   }
@@ -130,6 +163,14 @@ function UserRow({ user, onChanged, onToast }: { user: UserRecord; onChanged: ()
         <option value="admin">admin</option>
       </select>
     </td>
+    <td className="px-3 py-3">
+      <select value={user.agency ?? ''} disabled={busy} onChange={(event) => void changeAgency((event.target.value || null) as UserRecord['agency'])} aria-label={`Responder agency for ${user.full_name}`} className="rounded-md border border-slate-200 bg-transparent px-1.5 py-1 text-[11px] font-semibold text-slate-600 outline-none dark:border-slate-700 dark:text-slate-300">
+        {AGENCY_CHOICES.map((option) => <option key={option.label} value={option.value ?? ''}>{option.label}</option>)}
+      </select>
+      {user.agency === 'mdrrmo' && <select value={user.team ?? ''} disabled={busy} onChange={(event) => void changeTeam((event.target.value || null) as UserRecord['team'])} aria-label={`Field team for ${user.full_name}`} className="mt-1 block rounded-md border border-slate-200 bg-transparent px-1.5 py-1 text-[11px] font-semibold text-slate-600 outline-none dark:border-slate-700 dark:text-slate-300">
+        {TEAM_CHOICES.map((option) => <option key={option.label} value={option.value ?? ''}>{option.label}</option>)}
+      </select>}
+    </td>
     <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{user.barangay || <span className="italic text-slate-400">Not set</span>}</td>
     <td className="px-3 py-3">
       <button onClick={toggleActive} disabled={busy} className={`inline-flex items-center gap-1.5 disabled:opacity-50 ${user.is_active ? 'text-emerald-600' : 'text-slate-400'}`}>
@@ -152,6 +193,8 @@ function InvitePanel({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<UserRecord['role']>('staff');
+  const [agency, setAgency] = useState<UserRecord['agency']>(null);
+  const [team, setTeam] = useState<UserRecord['team']>(null);
   const [barangay, setBarangay] = useState('');
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -161,7 +204,14 @@ function InvitePanel({ onClose, onCreated }: { onClose: () => void; onCreated: (
     setBusy(true);
     setFailure(null);
     try {
-      await sendResource('/api/users', 'POST', { email: email.trim(), fullName: fullName.trim(), role, barangay: barangay.trim() || null });
+      await sendResource('/api/users', 'POST', {
+        email: email.trim(),
+        fullName: fullName.trim(),
+        role,
+        agency,
+        team: agency === 'mdrrmo' ? team : null,
+        barangay: barangay.trim() || null,
+      });
       onCreated(`${fullName.trim()} was created. Supabase Auth handles the password.`);
     } catch (cause) { setFailure(describeError(cause)); } finally { setBusy(false); }
   }
@@ -181,6 +231,20 @@ function InvitePanel({ onClose, onCreated }: { onClose: () => void; onCreated: (
           </select>
         </label>
         <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">Barangay<input value={barangay} onChange={(event) => setBarangay(event.target.value)} className="inset-control mt-1.5 block h-10 w-full px-3 text-sm dark:text-white" /></label>
+        <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">Responder agency
+          <select value={agency ?? ''} onChange={(event) => {
+            const value = (event.target.value || null) as UserRecord['agency'];
+            setAgency(value);
+            if (value !== 'mdrrmo') setTeam(null);
+          }} className="inset-control mt-1.5 block h-10 w-full px-3 text-sm dark:text-white">
+            {AGENCY_CHOICES.map((option) => <option key={option.label} value={option.value ?? ''}>{option.label}</option>)}
+          </select>
+        </label>
+        <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">MDRRMO field team
+          <select value={team ?? ''} disabled={agency !== 'mdrrmo'} onChange={(event) => setTeam((event.target.value || null) as UserRecord['team'])} className="inset-control mt-1.5 block h-10 w-full px-3 text-sm disabled:opacity-50 dark:text-white">
+            {TEAM_CHOICES.map((option) => <option key={option.label} value={option.value ?? ''}>{option.label}</option>)}
+          </select>
+        </label>
       </div>
       {failure && <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">{failure}</p>}
       <div className="mt-5 flex justify-end gap-2">

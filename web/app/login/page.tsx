@@ -210,7 +210,13 @@ export default function LoginPage() {
             {mode === 'responder' && <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Responder agency
               <div className="inset-control mt-2 flex items-center gap-2 px-3">
                 <Shield size={17} className="text-slate-400" />
-                <select required name="agency" autoComplete="off" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" value={agency} onChange={(event) => setAgency(event.target.value as 'bfp' | 'pnp' | 'coast_guard' | 'mdrrmo')}>
+                <select required name="agency" autoComplete="off" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" value={agency} onChange={(event) => {
+                  const next = event.target.value as 'bfp' | 'pnp' | 'coast_guard' | 'mdrrmo';
+                  setAgency(next);
+                  // Field teams are MDRRMO-only: a leftover team must not linger
+                  // on the disabled control for other agencies.
+                  if (next !== 'mdrrmo') setTeam('');
+                }}>
                   <option value="">Select agency</option>
                   {AGENCIES.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
