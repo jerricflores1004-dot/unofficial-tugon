@@ -1,5 +1,6 @@
 'use client';
 
+import 'leaflet/dist/leaflet.css';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Filter, MapPin, Search, X } from 'lucide-react';
@@ -12,6 +13,9 @@ import { Button, EmptyState, ErrorState, LoadingSkeleton, PanelHeader, PriorityB
 const PRIORITY_FILL: Record<Incident['priority'], string> = { critical: '#B91C1C', high: '#EA580C', medium: '#D97706', low: '#16A34A' };
 const PRIORITY_DOT: Record<Incident['priority'], string> = { critical: 'bg-critical', high: 'bg-high', medium: 'bg-medium', low: 'bg-low' };
 
+// Used when the map_default_* settings are not set (approximate centre of Mabini, Batangas).
+const FALLBACK_CENTER = { lat: 13.7565, lng: 120.9397 };
+
 export function MapView() {
   const [active, setActive] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -19,10 +23,9 @@ export function MapView() {
   const [mapError, setMapError] = useState<string | null>(null);
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
-  const markers = useRef<any[]>([]);
-  const googleRef = useRef<any>(null);
+  const layerRef = useRef<any>(null);
+  const leafletRef = useRef<any>(null);
 
-  const mapsKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
   const incidents = usePagedApi<Record<string, any>>(buildQuery('/api/incidents', { limit: 100, geolocated: 'true' }), []);
   const settings = useApi<Record<string, any>[]>('/api/settings');
   const settingsMap = useMemo(() => (settings.data ?? []).reduce<Record<string, SystemSetting>>((accumulator, row) => {
@@ -38,79 +41,92 @@ export function MapView() {
   }, [rows, query]);
   const selected = visible.find((incident) => incident.id === active) ?? null;
 
-  const defaultCenter = useMemo(() => ({
-    lat: settingNumber(settingsMap, 'map_default_latitude', 0),
-    lng: settingNumber(settingsMap, 'map_default_longitude', 0),
-    zoom: settingNumber(settingsMap, 'map_default_zoom', 12),
-  }), [settingsMap]);
-  const hasDefaultCenter = defaultCenter.lat !== 0 || defaultCenter.lng !== 0;
+  const center = useMemo(() => {
+    const lat = settingNumber(settingsMap, 'map_default_latitude', 0);
+    const lng = settingNumber(settingsMap, 'map_default_longitude', 0);
+    const zoom = settingNumber(settingsMap, 'map_default_zoom', 12);
+    return lat !== 0 || lng !== 0 ? { lat, lng, zoom } : { ...FALLBACK_CENTER, zoom };
+  }, [settingsMap]);
 
+  // Create the map once. Leaflet needs the browser, so it is loaded inside the effect.
   useEffect(() => {
-    if (!mapsKey || !mapRef.current) return;
+    if (!mapRef.current) return;
     let cancelled = false;
-    import('@googlemaps/js-api-loader')
-      .then(({ Loader }) => new Loader({ apiKey: mapsKey, version: 'weekly' }).load())
-      .then((googleMaps: any) => {
+    let map: any = null;
+    import('leaflet')
+      .then((module) => {
         if (cancelled || !mapRef.current) return;
-        googleRef.current = googleMaps;
-        mapInstance.current = new googleMaps.maps.Map(mapRef.current, {
-          center: hasDefaultCenter ? { lat: defaultCenter.lat, lng: defaultCenter.lng } : { lat: 0, lng: 0 },
-          zoom: defaultCenter.zoom,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: false,
-        });
+        const L = (module as any).default ?? module;
+        leafletRef.current = L;
+        map = L.map(mapRef.current).setView([center.lat, center.lng], center.zoom);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        }).addTo(map);
+        layerRef.current = L.layerGroup().addTo(map);
+        mapInstance.current = map;
         setMapLoaded(true);
       })
-      .catch(() => { if (!cancelled) setMapError('The map provider could not be reached.'); });
-    return () => { cancelled = true; };
-  }, [mapsKey, hasDefaultCenter, defaultCenter.lat, defaultCenter.lng, defaultCenter.zoom]);
+      .catch(() => { if (!cancelled) setMapError('The map could not be loaded.'); });
+    return () => {
+      cancelled = true;
+      if (map) map.remove();
+      mapInstance.current = null;
+      layerRef.current = null;
+      setMapLoaded(false);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Markers are drawn strictly from stored coordinates.
   useEffect(() => {
     const map = mapInstance.current;
-    if (!map || !mapLoaded) return;
-    const googleMaps = googleRef.current;
-    if (!googleMaps) return;
+    const L = leafletRef.current;
+    const layer = layerRef.current;
+    if (!map || !L || !layer || !mapLoaded) return;
+
+    layer.clearLayers();
     const points = visible.filter((incident) => incident.latitude !== null && incident.longitude !== null);
-    markers.current.forEach((marker) => marker.setMap(null));
-    markers.current = points.map((incident) => new googleMaps.maps.Marker({
-      map,
-      position: { lat: incident.latitude as number, lng: incident.longitude as number },
-      title: `${incident.type} · ${incident.ticket_id}`,
-      icon: {
-        path: googleMaps.maps.SymbolPath.CIRCLE,
-        scale: incident.priority === 'critical' ? 9 : 7,
+    points.forEach((incident) => {
+      const marker = L.circleMarker([incident.latitude as number, incident.longitude as number], {
+        radius: incident.priority === 'critical' ? 10 : 8,
+        color: '#FFFFFF',
+        weight: 3,
         fillColor: PRIORITY_FILL[incident.priority],
         fillOpacity: 1,
-        strokeColor: '#FFFFFF',
-        strokeWeight: 3,
-      },
-    }));
-    if (points.length > 0) {
-      const bounds = new googleMaps.maps.LatLngBounds();
-      points.forEach((incident) => bounds.extend({ lat: incident.latitude as number, lng: incident.longitude as number }));
-      map.fitBounds(bounds, 64);
-      if (points.length === 1) map.setZoom(Math.min(defaultCenter.zoom + 2, 16));
+      });
+      marker.bindTooltip(`${incident.type} · ${incident.ticket_id}`);
+      marker.on('click', () => setActive(incident.id));
+      marker.addTo(layer);
+    });
+
+    if (points.length === 0) {
+      map.setView([center.lat, center.lng], center.zoom);
+    } else if (points.length === 1) {
+      map.setView([points[0].latitude as number, points[0].longitude as number], Math.min(center.zoom + 2, 16));
+    } else {
+      map.fitBounds(
+        L.latLngBounds(points.map((incident) => [incident.latitude as number, incident.longitude as number])),
+        { padding: [64, 64] },
+      );
     }
-  }, [visible, mapLoaded, defaultCenter.zoom]);
+  }, [visible, mapLoaded, center.lat, center.lng, center.zoom]);
+
+  // Fly to an incident when it is picked from the list.
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map || !selected || selected.latitude === null || selected.longitude === null) return;
+    map.flyTo([selected.latitude, selected.longitude], Math.max(map.getZoom(), 15));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
 
   if (incidents.error) return <ErrorState detail={incidents.error} onRetry={incidents.reload} />;
 
   return <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
     <div className="surface relative min-h-[640px] overflow-hidden bg-[#d6e2eb] p-0 dark:bg-[#1a2b3a]">
-      {mapsKey
-        ? <>
-          <div ref={mapRef} className="absolute inset-0 z-0" />
-          {!mapLoaded && !mapError && <div className="absolute inset-0 grid place-items-center"><LoadingSkeleton className="h-24 w-24 rounded-full" /></div>}
-          {mapError && <div className="absolute inset-0 grid place-items-center p-8 text-center text-xs text-slate-600 dark:text-slate-300">{mapError}</div>}
-        </>
-        : <div className="absolute inset-0 grid place-items-center p-8">
-          <EmptyState
-            title="Map provider is not configured"
-            detail="Set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to plot stored coordinates. The incident list on the right is always read from the database."
-          />
-        </div>}
+      <div ref={mapRef} className="absolute inset-0 z-0" />
+      {!mapLoaded && !mapError && <div className="absolute inset-0 grid place-items-center"><LoadingSkeleton className="h-24 w-24 rounded-full" /></div>}
+      {mapError && <div className="absolute inset-0 grid place-items-center p-8 text-center text-xs text-slate-600 dark:text-slate-300">{mapError}</div>}
 
       <div className="absolute inset-x-8 top-8 z-10 flex items-center gap-2">
         <div className="inset-control flex min-w-0 flex-1 items-center gap-2 bg-white/90 px-3 dark:bg-slate-800/90">

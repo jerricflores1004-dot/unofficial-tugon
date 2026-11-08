@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import type { SetAllCookies } from '@supabase/ssr';
+import { isWebRole } from '@/lib/web-access';
 
 const PUBLIC_PREFIXES = ['/login', '/api/auth'];
 
@@ -55,9 +56,21 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Authenticated users should go to the dashboard
-  // instead of seeing the login page.
-  if (user && pathname === '/login') {
+  // Only staff-type accounts may use the web portal.
+  // Residents use the mobile app.
+  let allowed = false;
+  if (user) {
+    const { data: profile } = await supabase
+      .from('users')
+      .select('role, is_active')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    allowed = !!profile?.is_active && isWebRole(profile.role);
+  }
+
+  // Allowed users skip the login page.
+  if (allowed && pathname === '/login') {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
@@ -71,15 +84,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  return response;
-
-  // Protect the management system.
-  if (!user) {
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
-
-  if (pathname === '/login') {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+  // Signed in but not allowed on the web (e.g. a resident).
+  // API routes are left to requireRole() and RLS, because the mobile
+  // app may call them.
+  if (!allowed && !pathname.startsWith('/api/')) {
+    return NextResponse.redirect(
+      new URL('/login?error=unauthorized', request.url)
+    );
   }
 
   return response;
