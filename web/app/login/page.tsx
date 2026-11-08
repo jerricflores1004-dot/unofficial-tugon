@@ -2,37 +2,29 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowRight, Database, Eye, EyeOff, LockKeyhole, Mail, Phone, Shield, TriangleAlert, User, Users } from 'lucide-react';
+import { ArrowRight, Database, Eye, EyeOff, LockKeyhole, Mail, Shield, TriangleAlert } from 'lucide-react';
 import { Button, Spinner } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { describeError, request } from '@/lib/api-client';
 
-type Mode = 'signin' | 'register' | 'reset' | 'responder';
+type Mode = 'signin' | 'reset' | 'responder';
+type Agency = 'bfp' | 'pnp' | 'coast_guard';
 
-const AGENCIES: { value: 'bfp' | 'pnp' | 'coast_guard' | 'mdrrmo'; label: string }[] = [
+const AGENCIES: { value: Agency; label: string }[] = [
   { value: 'bfp', label: 'Bureau of Fire Protection (BFP)' },
   { value: 'pnp', label: 'Philippine National Police (PNP)' },
   { value: 'coast_guard', label: 'Philippine Coast Guard' },
-  { value: 'mdrrmo', label: 'MDRRMO Mabini' },
-];
-
-const TEAMS: { value: 'alpha' | 'bravo' | 'charlie'; label: string }[] = [
-  { value: 'alpha', label: 'Team Alpha' },
-  { value: 'bravo', label: 'Team Bravo' },
-  { value: 'charlie', label: 'Team Charlie' },
 ];
 
 const TITLES: Record<Mode, string> = {
   signin: 'Welcome back',
-  register: 'Create your account',
   reset: 'Reset your password',
   responder: 'Responder sign in',
 };
 const SUBTITLES: Record<Mode, string> = {
   signin: 'Sign in to continue to your response workspace.',
-  register: 'Register with your name and email. Staff roles are assigned by the TUGON system administrator.',
   reset: 'Supabase Auth will email you a reset link.',
-  responder: 'Sign in as BFP, PNP, Coast Guard, or MDRRMO Team Alpha, Bravo, or Charlie.',
+  responder: 'Sign in as BFP, PNP, or the Philippine Coast Guard to receive dispatches.',
 };
 
 export default function LoginPage() {
@@ -42,8 +34,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [agency, setAgency] = useState<'bfp' | 'pnp' | 'coast_guard' | 'mdrrmo' | ''>('');
-  const [team, setTeam] = useState<'alpha' | 'bravo' | 'charlie' | ''>('');
+  const [agency, setAgency] = useState<Agency | ''>('');
 
   function switchMode(next: Mode) {
     setMode(next);
@@ -65,46 +56,17 @@ export default function LoginPage() {
     }
   }
 
-  async function signInResponder(input: { email: string; password: string; agency: string; team: string | null }) {
+  async function signInResponder(input: { email: string; password: string; agency: string }) {
     setLoading(true);
     setError('');
     try {
-      await request<{ profile: unknown }>('/api/auth/responder-login', {
+      const result = await request<{ profile?: { role?: string } }>('/api/auth/responder-login', {
         method: 'POST',
-        body: JSON.stringify({ email: input.email, password: input.password, agency: input.agency, team: input.team }),
+        body: JSON.stringify({ email: input.email, password: input.password, agency: input.agency }),
       });
-      router.replace('/dashboard');
+      // Agency accounts land on their dispatch inbox, not the admin dashboard.
+      router.replace(result?.profile?.role === 'department_head' ? '/responder' : '/dashboard');
       router.refresh();
-    } catch (cause) {
-      setError(describeError(cause));
-      setLoading(false);
-    }
-  }
-
-  async function register(input: { fullName: string; email: string; phone: string; password: string }) {
-    setLoading(true);
-    setError('');
-    setNotice('');
-    try {
-      const result = await request<{ session?: unknown | null }>('/api/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({
-          fullName: input.fullName,
-          email: input.email,
-          password: input.password,
-          // Omit an empty phone so the server's optional-but-min-length rule is not triggered.
-          ...(input.phone ? { phone: input.phone } : {}),
-        }),
-      });
-      if (result?.session) {
-        router.replace('/dashboard');
-        router.refresh();
-        return;
-      }
-      // Email confirmation is enabled in Supabase Auth: no session yet.
-      setLoading(false);
-      switchMode('signin');
-      setNotice('Account created. Check your email to confirm your address, then sign in.');
     } catch (cause) {
       setError(describeError(cause));
       setLoading(false);
@@ -128,29 +90,14 @@ export default function LoginPage() {
     const data = new FormData(event.currentTarget);
     const email = String(data.get('email') ?? '').trim();
     if (mode === 'reset') { void resetPassword(email); return; }
-    if (mode === 'register') {
-      const password = String(data.get('password') ?? '');
-      const confirmPassword = String(data.get('confirmPassword') ?? '');
-      if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
-      void register({
-        fullName: String(data.get('fullName') ?? '').trim(),
-        email,
-        phone: String(data.get('phone') ?? '').trim(),
-        password,
-      });
-      return;
-    }
     if (mode === 'responder') {
       const password = String(data.get('password') ?? '');
       if (!agency) { setError('Select your responder agency.'); return; }
-      if (agency === 'mdrrmo' && !team) { setError('Select your MDRRMO field team.'); return; }
-      void signInResponder({ email, password, agency, team: agency === 'mdrrmo' ? team : null });
+      void signInResponder({ email, password, agency });
       return;
     }
     void signIn(email, String(data.get('password') ?? ''));
   }
-
-  const isRegister = mode === 'register';
 
   return <main className="min-h-screen bg-canvas p-4 dark:bg-[#111827] sm:p-6">
     <div className="mx-auto grid min-h-[calc(100vh-48px)] max-w-6xl overflow-hidden rounded-3xl border border-white/70 bg-[#f1f5f9] shadow-neumorphic dark:border-slate-700 dark:bg-[#1f2937] dark:shadow-neumorphic-dark lg:grid-cols-[1.05fr_.95fr]">
@@ -193,24 +140,17 @@ export default function LoginPage() {
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{SUBTITLES[mode]}</p>
 
           <form className="mt-8 space-y-5" onSubmit={submit}>
-            {isRegister && <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Full name
-              <div className="inset-control mt-2 flex items-center gap-2 px-3">
-                <User size={17} className="text-slate-400" />
-                <input required minLength={2} maxLength={120} type="text" name="fullName" autoComplete="name" placeholder="Juan Dela Cruz" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" />
-              </div>
-            </label>}
-
-            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">{isRegister ? 'Email' : 'Work email'}
+            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Work email
               <div className="inset-control mt-2 flex items-center gap-2 px-3">
                 <Mail size={17} className="text-slate-400" />
-                <input required type="email" name="email" autoComplete="email" placeholder={isRegister ? 'you@example.com' : 'you@municipality.gov.ph'} className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" />
+                <input required type="email" name="email" autoComplete="email" placeholder="you@municipality.gov.ph" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" />
               </div>
             </label>
 
             {mode === 'responder' && <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Responder agency
               <div className="inset-control mt-2 flex items-center gap-2 px-3">
                 <Shield size={17} className="text-slate-400" />
-                <select required name="agency" autoComplete="off" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" value={agency} onChange={(event) => setAgency(event.target.value as 'bfp' | 'pnp' | 'coast_guard' | 'mdrrmo')}>
+                <select required name="agency" autoComplete="off" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" value={agency} onChange={(event) => setAgency(event.target.value as Agency)}>
                   <option value="">Select agency</option>
                   {AGENCIES.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
@@ -219,80 +159,38 @@ export default function LoginPage() {
               </div>
             </label>}
 
-            {mode === 'responder' && <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Field team {agency === 'mdrrmo' ? <span className="font-normal text-slate-400">(required)</span> : <span className="font-normal text-slate-400">(not used)</span>}
-              <div className="inset-control mt-2 flex items-center gap-2 px-3">
-                <Users size={17} className="text-slate-400" />
-                <select
-                  required={agency === 'mdrrmo'}
-                  disabled={agency !== 'mdrrmo'}
-                  name="team"
-                  autoComplete="off"
-                  className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white"
-                  value={team}
-                  onChange={(event) => setTeam(event.target.value as 'alpha' | 'bravo' | 'charlie')}
-                >
-                  <option value="">Select team</option>
-                  {TEAMS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-                {agency !== 'mdrrmo' && <span className="text-xs text-slate-400">MDRRMO field teams only</span>}
-              </div>
-            </label>}
-
-            {isRegister && <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Phone <span className="font-normal text-slate-400">(optional)</span>
-              <div className="inset-control mt-2 flex items-center gap-2 px-3">
-                <Phone size={17} className="text-slate-400" />
-                <input type="tel" name="phone" minLength={7} maxLength={30} autoComplete="tel" placeholder="09XX XXX XXXX" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" />
-              </div>
-            </label>}
-
             {mode !== 'reset' && <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Password
               <div className="inset-control mt-2 flex items-center gap-2 px-3">
                 <LockKeyhole size={17} className="text-slate-400" />
-                <input required minLength={8} type={showPassword ? 'text' : 'password'} name="password" autoComplete={isRegister ? 'new-password' : 'current-password'} placeholder={isRegister ? 'At least 8 characters' : 'Enter your password'} className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" />
+                <input required minLength={8} type={showPassword ? 'text' : 'password'} name="password" autoComplete="current-password" placeholder="Enter your password" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-slate-400 hover:text-blue" aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button>
               </div>
             </label>}
 
-            {isRegister && <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Confirm password
-              <div className="inset-control mt-2 flex items-center gap-2 px-3">
-                <LockKeyhole size={17} className="text-slate-400" />
-                <input required minLength={8} type={showPassword ? 'text' : 'password'} name="confirmPassword" autoComplete="new-password" placeholder="Re-enter your password" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" />
-              </div>
-            </label>}
-
-            {mode !== 'register' && <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between">
               {mode === 'signin'
                 ? <label className="flex items-center gap-2 text-xs text-slate-500"><input type="checkbox" name="remember" className="h-4 w-4 rounded border-slate-300 text-blue focus:ring-blue" />Remember me</label>
                 : <span />}
               <button type="button" onClick={() => switchMode(mode === 'reset' ? 'signin' : 'reset')} className="text-xs font-bold text-blue hover:underline">
                 {mode === 'reset' ? 'Back to sign in' : 'Forgot password?'}
               </button>
-            </div>}
+            </div>
 
             {error && <div role="alert" className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"><TriangleAlert size={16} className="shrink-0" />{error}</div>}
             {notice && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">{notice}</div>}
 
             <Button type="submit" className="w-full" disabled={loading || !isSupabaseConfigured}>
               {loading
-                ? <><Spinner /> {mode === 'reset' ? 'Sending…' : isRegister ? 'Creating account…' : 'Signing in…'}</>
+                ? <><Spinner /> {mode === 'reset' ? 'Sending…' : 'Signing in…'}</>
                 : mode === 'reset' ? <>Send reset link <ArrowRight size={16} /></>
-                : isRegister ? <>Create account <ArrowRight size={16} /></>
                 : <>Sign in <ArrowRight size={16} /></>}
             </Button>
           </form>
 
-          {mode !== 'reset' && <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
-            {isRegister ? 'Already have an account? ' : 'New to TUGON? '}
-            <button type="button" onClick={() => switchMode(isRegister ? 'signin' : 'register')} className="font-bold text-blue hover:underline">
-              {isRegister ? 'Sign in' : 'Create an account'}
-            </button>
-          </p>}
           {mode === 'signin' && <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
             Signing in as a responder?{' '}
             <button type="button" onClick={() => switchMode('responder')} className="font-bold text-blue hover:underline">
-              Responder sign in (BFP · PNP · Coast Guard · MDRRMO)
+              Responder sign in (BFP · PNP · Coast Guard)
             </button>
           </p>}
           {mode === 'responder' && <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
@@ -302,7 +200,7 @@ export default function LoginPage() {
             </button>
           </p>}
 
-          <p className="mt-10 text-center text-[11px] text-slate-400">{isRegister ? 'Staff access is granted by the TUGON system administrator.' : mode === 'responder' ? 'Responder profiles are created by the TUGON system administrator.' : 'Need access? Contact the TUGON system administrator.'}</p>
+          <p className="mt-10 text-center text-[11px] text-slate-400">{mode === 'responder' ? 'Responder accounts are created by the TUGON system administrator.' : 'Need access? Contact the TUGON system administrator.'}</p>
         </div>
       </section>
     </div>

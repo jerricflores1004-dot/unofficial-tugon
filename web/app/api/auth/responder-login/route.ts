@@ -2,19 +2,18 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createServerSupabase } from '@/lib/supabase-server';
 
+// Web responder sign-in is for the agency accounts only (one per agency).
+// MDRRMO field staff use the mobile app and cannot sign in here.
 const schema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
-  agency: z.enum(['bfp', 'pnp', 'coast_guard', 'mdrrmo']),
-  // MDRRMO responders must name their field team (alpha, bravo, charlie).
-  // Other agencies do not use MDRRMO field teams.
-  team: z.enum(['alpha', 'bravo', 'charlie']).optional(),
+  agency: z.enum(['bfp', 'pnp', 'coast_guard']),
 });
 
 export async function POST(request: Request) {
-  const body = schema.safeParse(await request.json());
+  const body = schema.safeParse(await request.json().catch(() => null));
   if (!body.success) return NextResponse.json({ error: 'Invalid sign-in details.' }, { status: 400 });
-  const { email, password, agency, team } = body.data;
+  const { email, password, agency } = body.data;
 
   const supabase = await createServerSupabase();
   if (!supabase) return NextResponse.json({ error: 'Authentication service is not configured.' }, { status: 503 });
@@ -27,17 +26,22 @@ export async function POST(request: Request) {
     .select('id, email, full_name, role, agency, team, barangay, is_active')
     .eq('id', data.user.id)
     .maybeSingle();
-  if (profileError || !profile || !profile.is_active) {
-    return NextResponse.json({ error: 'An active responder profile is required.' }, { status: 403 });
+
+  // From here on, any refusal also ends the session that was just created,
+  // so a rejected account is not left signed in.
+  async function refuse(message: string) {
+    await supabase!.auth.signOut();
+    return NextResponse.json({ error: message }, { status: 403 });
   }
 
-  // The profile must belong to the agency the responder signed in as, and an
-  // MDRRMO account must match its field team. Other agencies carry no team.
-  if (profile.agency !== agency) {
-    return NextResponse.json({ error: 'Your profile is not registered under that agency.' }, { status: 403 });
+  if (profileError || !profile || !profile.is_active) {
+    return refuse('An active responder profile is required.');
   }
-  if (agency === 'mdrrmo' ? profile.team !== team : profile.team !== null) {
-    return NextResponse.json({ error: 'Your profile is not registered under that field team.' }, { status: 403 });
+  if (profile.role !== 'department_head') {
+    return refuse('This sign-in is for agency accounts only.');
+  }
+  if (profile.agency !== agency) {
+    return refuse('Your profile is not registered under that agency.');
   }
 
   return NextResponse.json({ user: data.user, session: data.session, profile });

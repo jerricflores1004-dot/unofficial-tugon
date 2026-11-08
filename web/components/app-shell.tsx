@@ -48,6 +48,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   const summary = useApi<WorkspaceSummary>('/api/workspace/summary');
   const { reload: reloadSummary } = summary;
   const profile = summary.data?.profile ?? null;
+  const agencyAccount = profile?.role === 'department_head';
   const displayName = profile?.full_name || profile?.email || 'Signed-in user';
   const refresh = useCallback(() => reloadSummary(), [reloadSummary]);
 
@@ -71,18 +72,23 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
     return () => { void client.removeChannel(channel); };
   }, [refresh]);
 
-  const primaryNav: NavEntry[] = [
-    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { label: 'Incidents', href: '/incidents', icon: Siren, badge: summary.data?.attention_incidents ?? 0 },
-    { label: 'Tickets', href: '/tickets', icon: Ticket },
-    { label: 'Responders', href: '/responders', icon: Users },
-    { label: 'Live map', href: '/map', icon: Map },
-    { label: 'Reports', href: '/reports', icon: FileBarChart2 },
-  ];
-  const systemNav: NavEntry[] = [
-    { label: 'Notifications', href: '/notifications', icon: Bell, badge: summary.data?.unread_notifications ?? 0 },
-    { label: 'Settings', href: '/settings', icon: Settings },
-  ];
+  // Agency accounts (BFP, PNP, Coast Guard) only get the dispatch inbox.
+  const primaryNav: NavEntry[] = agencyAccount
+    ? [{ label: 'Dispatches', href: '/responder', icon: Radio }]
+    : [
+        { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        { label: 'Incidents', href: '/incidents', icon: Siren, badge: summary.data?.attention_incidents ?? 0 },
+        { label: 'Tickets', href: '/tickets', icon: Ticket },
+        { label: 'Responders', href: '/responders', icon: Users },
+        { label: 'Live map', href: '/map', icon: Map },
+        { label: 'Reports', href: '/reports', icon: FileBarChart2 },
+      ];
+  const systemNav: NavEntry[] = agencyAccount
+    ? []
+    : [
+        { label: 'Notifications', href: '/notifications', icon: Bell, badge: summary.data?.unread_notifications ?? 0 },
+        { label: 'Settings', href: '/settings', icon: Settings },
+      ];
 
   function toggleTheme() {
     const next = !dark;
@@ -113,10 +119,12 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
       </div>
       <div className={`mb-3 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-slate-400 ${collapsed ? 'text-center' : ''}`}>{collapsed ? '•' : 'Operations'}</div>
       <nav className="space-y-1" aria-label="Primary navigation">{primaryNav.map((item) => <NavItem item={item} collapsed={collapsed} key={item.href} />)}</nav>
-      <div className={`mb-3 mt-8 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-slate-400 ${collapsed ? 'text-center' : ''}`}>{collapsed ? '•' : 'Workspace'}</div>
-      <nav className="space-y-1" aria-label="Workspace navigation">{systemNav.map((item) => <NavItem item={item} collapsed={collapsed} key={item.href} />)}</nav>
+      {systemNav.length > 0 && <>
+        <div className={`mb-3 mt-8 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-slate-400 ${collapsed ? 'text-center' : ''}`}>{collapsed ? '•' : 'Workspace'}</div>
+        <nav className="space-y-1" aria-label="Workspace navigation">{systemNav.map((item) => <NavItem item={item} collapsed={collapsed} key={item.href} />)}</nav>
+      </>}
       <div className="mt-auto space-y-3">
-        {!collapsed && <div className="rounded-2xl border border-blue/10 bg-blue/5 p-3 dark:border-blue-900/50 dark:bg-blue-950/30">
+        {!collapsed && !agencyAccount && <div className="rounded-2xl border border-blue/10 bg-blue/5 p-3 dark:border-blue-900/50 dark:bg-blue-950/30">
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-navy dark:text-blue-100"><span className="grid h-6 w-6 place-items-center rounded-lg bg-blue text-white"><Radio size={14} /></span>Needs attention</div>
           {summary.loading && <p className="text-[11px] leading-4 text-slate-500 dark:text-slate-400">Loading database counts…</p>}
           {summary.error && <p className="text-[11px] leading-4 text-red-600 dark:text-red-300">{summary.error}</p>}
@@ -143,7 +151,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
           <button onClick={() => setSearchOpen(!searchOpen)} className="focus-ring rounded-xl p-2 text-slate-500 hover:bg-white/65 md:hidden" aria-label="Open search"><Search size={19} /></button>
           <div className={`hidden items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold sm:flex ${connection.box}`}><span className={`h-2 w-2 rounded-full ${connection.dot}`} />{connection.label}</div>
           <button onClick={toggleTheme} className="focus-ring rounded-xl p-2 text-slate-500 hover:bg-white/65 dark:text-slate-300 dark:hover:bg-slate-800" aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
-          <Link href="/notifications" className="focus-ring relative rounded-xl p-2 text-slate-500 hover:bg-white/65 dark:text-slate-300 dark:hover:bg-slate-800" aria-label="Notifications">
+          <Link href={agencyAccount ? '/responder' : '/notifications'} className="focus-ring relative rounded-xl p-2 text-slate-500 hover:bg-white/65 dark:text-slate-300 dark:hover:bg-slate-800" aria-label="Notifications">
             <Bell size={19} />
             {Boolean(summary.data?.unread_notifications) && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-[#e8edf3] bg-emergency dark:border-[#111827]" />}
           </Link>
