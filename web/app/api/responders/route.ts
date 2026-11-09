@@ -5,7 +5,7 @@ import { requireRole, badRequest } from '@/lib/server-auth';
 const SELECT = '*, assigned_incidents:incidents!assigned_responder_id(id, incident_type, status, reported_at)';
 
 export async function GET() {
-  const auth = await requireRole(['staff', 'admin', 'department_head']);
+  const auth = await requireRole(['admin']);
   if ('error' in auth) return auth.error;
   const { data, error } = await auth.supabase.from('responders').select(SELECT).order('name');
   if (error) return badRequest('Unable to load responders.', 500);
@@ -22,7 +22,7 @@ const createResponder = z.object({
 });
 
 export async function POST(request: Request) {
-  const auth = await requireRole(['staff', 'admin']);
+  const auth = await requireRole(['admin']);
   if ('error' in auth) return auth.error;
   const parsed = createResponder.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return badRequest('Responder name and unit are required.');

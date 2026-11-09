@@ -24,7 +24,15 @@ class TugonApi {
   final SupabaseClient client;
 
   String get _userId => client.auth.currentUser?.id ?? '';
-
+  Future<AppProfile?> myProfile() async {
+    final row = await client
+        .from('users')
+        .select('role, agency, team, full_name, is_active')
+        .eq('id', _userId)
+        .maybeSingle();
+    if (row == null) return null;
+    return AppProfile.fromJson(Map<String, dynamic>.from(row as Map));
+  }
   Future<List<ResidentIncident>> myIncidents() async {
     final response = await client
         .from('incidents')

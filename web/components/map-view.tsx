@@ -21,6 +21,7 @@ export function MapView() {
   const [query, setQuery] = useState('');
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [showClosed, setShowClosed] = useState(false);
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
   const layerRef = useRef<any>(null);
@@ -35,10 +36,13 @@ export function MapView() {
 
   const rows = useMemo(() => incidents.rows.map(mapIncident), [incidents.rows]);
   const visible = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return rows;
-    return rows.filter((incident) => `${incident.ticket_id} ${incident.type} ${incident.barangay} ${incident.location}`.toLowerCase().includes(needle));
-  }, [rows, query]);
+      const needle = query.trim().toLowerCase();
+      return rows.filter((incident) => {
+        if (!showClosed && ['resolved', 'closed', 'rejected'].includes(incident.status)) return false;
+        if (!needle) return true;
+        return `${incident.ticket_id} ${incident.type} ${incident.barangay} ${incident.location}`.toLowerCase().includes(needle);
+      });
+    }, [rows, query, showClosed]);
   const selected = visible.find((incident) => incident.id === active) ?? null;
 
   const center = useMemo(() => {
@@ -135,6 +139,11 @@ export function MapView() {
         </div>
         <button onClick={incidents.reload} className="grid h-10 w-10 place-items-center rounded-xl border border-white/80 bg-white/90 text-slate-500 shadow-md hover:text-blue dark:border-slate-600 dark:bg-slate-800/90" aria-label="Reload incidents"><Filter size={17} /></button>
       </div>
+
+      <label className="flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-white/80 bg-white/90 px-3 text-[11px] font-semibold text-slate-600 shadow-md dark:border-slate-600 dark:bg-slate-800/90 dark:text-slate-300">
+        <input type="checkbox" checked={showClosed} onChange={(event) => setShowClosed(event.target.checked)} className="h-3.5 w-3.5 rounded border-slate-300 text-blue focus:ring-blue" />
+        Show closed
+      </label>
 
       <div className="absolute bottom-5 left-5 z-10 rounded-xl border border-white/70 bg-white/90 p-3 shadow-lg dark:border-slate-600 dark:bg-slate-800/90">
         <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Incident priority</p>

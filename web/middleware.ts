@@ -3,7 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import type { SetAllCookies } from '@supabase/ssr';
 import { isWebRole } from '@/lib/web-access';
 
-const PUBLIC_PREFIXES = ['/login', '/api/auth'];
+const PUBLIC_PREFIXES = ['/login', '/api/auth', '/api/push'];
 
 const PUBLIC_PAGES = ['/', '/about', '/contact'];
 

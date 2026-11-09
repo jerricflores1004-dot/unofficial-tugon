@@ -11,7 +11,7 @@ const patch = z.object({
 }).strict();
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
-  const auth = await requireRole(['staff', 'admin']);
+  const auth = await requireRole(['admin']);
   if ('error' in auth) return auth.error;
   const parsed = patch.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return badRequest('Invalid responder update.');

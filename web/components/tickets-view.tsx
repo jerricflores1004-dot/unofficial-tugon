@@ -67,6 +67,7 @@ export function TicketsView() {
   const [dispatches, setDispatches] = useState<Record<string, DispatchRow[]>>({});
   const [target, setTarget] = useState<Ticket | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastTone, setToastTone] = useState<'success' | 'error'>('success');
   const path = buildQuery('/api/tickets', { limit: 100, status: status === 'all' ? null : status });
   const { rows, count, loading, error, reload } = usePagedApi<Record<string, any>>(path, [path]);
   const pulse = useApi<Pulse>('/api/analytics/operations-pulse');
@@ -105,10 +106,16 @@ export function TicketsView() {
   }, [toast]);
 
   function changed(message: string) {
-    setToast(message);
-    void loadDispatches();
-    reload();
-  }
+      setToastTone('success');
+      setToast(message);
+      void loadDispatches();
+      reload();
+    }
+
+    function failed(message: string) {
+      setToastTone('error');
+      setToast(message);
+    }
 
   if (error) return <ErrorState detail={error} onRetry={reload} />;
 
@@ -136,7 +143,7 @@ export function TicketsView() {
         : filtered.length === 0
           ? <div className="p-6"><EmptyState title="No tickets found" detail="Tickets appear here as soon as incidents are recorded in the database." action={<Button variant="secondary" size="sm" onClick={reload}>Refresh</Button>} /></div>
           : <div className="divide-y divide-slate-200/70 dark:divide-slate-700/70">
-            {filtered.map((ticket) => <TicketRow key={ticket.id} ticket={ticket} dispatches={dispatches[ticket.id] ?? []} onDispatch={() => setTarget(ticket)} onChanged={changed} onFailed={setToast} />)}
+            {filtered.map((ticket) => <TicketRow key={ticket.id} ticket={ticket} dispatches={dispatches[ticket.id] ?? []} onDispatch={() => setTarget(ticket)} onChanged={changed} onFailed={failed} />)}
           </div>}
     </div>
 
@@ -146,7 +153,7 @@ export function TicketsView() {
       onClose={() => setTarget(null)}
       onSent={(label) => { setTarget(null); changed(`Dispatch sent to ${label}.`); }}
     />}
-    {toast && <Toast onClose={() => setToast(null)}>{toast}</Toast>}
+        {toast && <Toast tone={toastTone} onClose={() => setToast(null)}>{toast}</Toast>}
   </div>;
 }
 

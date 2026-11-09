@@ -31,7 +31,7 @@ const create = z.object({
 });
 
 export async function POST(request: Request) {
-  const auth = await requireRole(['admin', 'department_head']);
+  const auth = await requireRole(['admin']);
   if ('error' in auth) return auth.error;
   const parsed = create.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return badRequest('Invalid announcement.');
