@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { badRequest, requireRole } from '@/lib/server-auth';
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
-  const auth = await requireRole(['staff', 'admin', 'department_head']);
+  const auth = await requireRole(['admin']);
   if ('error' in auth) return auth.error;
   const { data, error } = await auth.supabase.from('ticket_updates').select('*, author:users!author_id(full_name)').eq('ticket_id', params.id).order('created_at', { ascending: true });
   if (error) return badRequest('Unable to load ticket updates.', 500);
@@ -11,7 +11,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 }
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
-  const auth = await requireRole(['staff', 'admin']);
+  const auth = await requireRole(['admin']);
   if ('error' in auth) return auth.error;
   const parsed = z.object({
     message: z.string().min(1).max(2000),

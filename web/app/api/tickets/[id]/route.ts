@@ -12,7 +12,7 @@ const schema = z.object({
 }).strict();
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
-  const auth = await requireRole(['staff', 'admin', 'department_head']);
+  const auth = await requireRole(['admin']);
   if ('error' in auth) return auth.error;
   const { data, error } = await auth.supabase.from('tickets').select(SELECT).eq('id', params.id).maybeSingle();
   if (error || !data) return badRequest('Ticket not found.', 404);
@@ -20,7 +20,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 }
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
-  const auth = await requireRole(['staff', 'admin']);
+  const auth = await requireRole(['admin']);
   if ('error' in auth) return auth.error;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return badRequest('Invalid ticket update.');

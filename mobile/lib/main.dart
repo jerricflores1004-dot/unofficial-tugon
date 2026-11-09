@@ -11,6 +11,8 @@ import 'core/models.dart';
 import 'core/offline_queue.dart';
 import 'core/theme.dart';
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
+import 'core/push.dart';
 
 final supabaseProvider = Provider<SupabaseClient>((ref) => Supabase.instance.client);
 final apiProvider = Provider<TugonApi>((ref) => TugonApi(ref.watch(supabaseProvider)));
@@ -30,6 +32,8 @@ final queuedReportsProvider =
     FutureProvider.autoDispose((ref) => ref.watch(queueProvider).read());
 final photoLimitProvider = FutureProvider.autoDispose(
     (ref) => ref.watch(apiProvider).numericSetting('max_incident_photos', 5));
+final profileProvider =
+FutureProvider.autoDispose((ref) => ref.watch(apiProvider).myProfile());
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -167,7 +171,7 @@ class TugonApp extends ConsumerWidget {
       },
       routes: [
         GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
-        GoRoute(path: '/', builder: (_, __) => const HomeScreen()),
+        GoRoute(path: '/', builder: (_, __) => const RoleGate()),
         GoRoute(path: '/report', builder: (_, __) => const ReportScreen()),
         GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),
         GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
@@ -188,6 +192,143 @@ class TugonApp extends ConsumerWidget {
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
     stream.listen((_) => notifyListeners());
+  }
+}
+
+/// Sends each signed-in account to the right experience for its role.
+class RoleGate extends ConsumerWidget {
+  const RoleGate({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(profileProvider);
+    return profile.when(
+        loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+        error: (_, __) => GateMessage(
+            icon: Icons.cloud_off_outlined,
+            title: 'Unable to load your account',
+            body: 'Check your connection and try again.',
+            onRetry: () => ref.invalidate(profileProvider)),
+        data: (p) {
+          if (p != null && p.isActive) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              PushService.start(ref.read(supabaseProvider),
+                  onMessage: () => ref.invalidate(notificationsProvider));
+            });
+          }
+          if (p == null || !p.isActive) {
+            return const GateMessage(
+                icon: Icons.lock_outline,
+                title: 'No active profile',
+                body: 'Your account has no active TUGON profile. Contact the TUGON system administrator.');
+          }
+          switch (p.role) {
+            case 'resident':
+              return const HomeScreen();
+            case 'staff':
+              return StaffHomeScreen(profile: p);
+            default:
+              return const GateMessage(
+                  icon: Icons.desktop_windows_outlined,
+                  title: 'Use the web portal',
+                  body: 'Admin and agency accounts work in the TUGON web portal at unofficial-tugon.vercel.app.');
+          }
+        });
+  }
+}
+
+class GateMessage extends ConsumerWidget {
+  const GateMessage(
+      {super.key, required this.icon, required this.title, required this.body, this.onRetry});
+  final IconData icon;
+  final String title;
+  final String body;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Scaffold(
+      body: SafeArea(
+          child: Center(
+              child: Padding(
+                  padding: const EdgeInsets.all(28),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const LogoMark(large: true),
+                    const SizedBox(height: 32),
+                    Icon(icon, size: 44, color: TugonColors.blue),
+                    const SizedBox(height: 16),
+                    Text(title,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: TugonColors.navy)),
+                    const SizedBox(height: 8),
+                    Text(body,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: TugonColors.muted, height: 1.4)),
+                    const SizedBox(height: 24),
+                    if (onRetry != null)
+                      FilledButton(onPressed: onRetry, child: const Text('Try again')),
+                    const SizedBox(height: 10),
+                    OutlinedButton(
+                        onPressed: () => ref.read(supabaseProvider).auth.signOut(),
+                        child: const Text('Sign out'))
+                  ])))));
+}
+
+/// First version of the MDRRMO field-staff screen: identity plus the
+/// notifications the admin sends. Assignments come with the roster rework.
+class StaffHomeScreen extends ConsumerWidget {
+  const StaffHomeScreen({super.key, required this.profile});
+  final AppProfile profile;
+
+  String get _team => profile.team == null
+      ? 'MDRRMO field staff'
+      : 'MDRRMO · Team ${profile.team![0].toUpperCase()}${profile.team!.substring(1)}';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final feed = ref.watch(notificationsProvider);
+    return Scaffold(
+        appBar: AppBar(
+            title: const Text('Field staff', style: TextStyle(fontWeight: FontWeight.w800)),
+            actions: [
+              IconButton(
+                  tooltip: 'Sign out',
+                  onPressed: () => ref.read(supabaseProvider).auth.signOut(),
+                  icon: const Icon(Icons.logout))
+            ]),
+        body: RefreshIndicator(
+            onRefresh: () async => ref.invalidate(notificationsProvider),
+            child: ListView(padding: const EdgeInsets.fromLTRB(20, 16, 20, 30), children: [
+              Text(profile.fullName.isEmpty ? 'Field staff' : profile.fullName,
+                  style: const TextStyle(
+                      fontSize: 22, fontWeight: FontWeight.w800, color: TugonColors.navy)),
+              const SizedBox(height: 4),
+              Text(_team, style: const TextStyle(color: TugonColors.muted)),
+              const SizedBox(height: 22),
+              const Text('Notifications from the MDRRMO',
+                  style: TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w800, color: TugonColors.navy)),
+              const SizedBox(height: 10),
+              feed.when(
+                  loading: () => const Padding(
+                      padding: EdgeInsets.all(20), child: LinearProgressIndicator()),
+                  error: (_, __) => const Card(
+                      child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text('Notifications could not be loaded. Pull to retry.'))),
+                  data: (items) => items.isEmpty
+                      ? const Card(
+                      child: Padding(
+                          padding: EdgeInsets.all(18),
+                          child: Text('No notifications yet. Assignments will appear here.',
+                              style: TextStyle(color: TugonColors.muted, fontSize: 12))))
+                      : Column(
+                      children: items
+                          .map((item) => NotificationTile(notification: item))
+                          .toList()))
+            ])));
   }
 }
 
@@ -709,6 +850,10 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
   bool saving = false;
   String? failure;
   List<XFile> photos = [];
+  double? latitude;
+  double? longitude;
+  bool locating = false;
+  String? locationNote;
 
   @override
   void dispose() {
@@ -733,6 +878,43 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
     }
   }
 
+  Future<void> captureLocation() async {
+    setState(() {
+      locating = true;
+      locationNote = null;
+    });
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        setState(() => locationNote = 'Turn on location services, then try again.');
+        return;
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        setState(() => locationNote =
+        'Location permission was denied. You can still type the location.');
+        return;
+      }
+      final position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 15)));
+      if (!mounted) return;
+      setState(() {
+        latitude = position.latitude;
+        longitude = position.longitude;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() => locationNote = 'Could not get your location. You can still type it.');
+      }
+    } finally {
+      if (mounted) setState(() => locating = false);
+    }
+  }
+
   Future<void> submit(List<IncidentTypeOption> options) async {
     if (!(formKey.currentState?.validate() ?? false)) return;
     final label = options.isEmpty ? customType.text.trim() : (selectedType ?? '').trim();
@@ -753,6 +935,10 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
       'severity': severity,
       'affected_people': int.tryParse(affectedPeople.text.trim()) ?? 0,
       'vulnerable_groups': <String>[],
+      if (latitude != null && longitude != null) ...{
+        'latitude': latitude,
+        'longitude': longitude,
+      },
     };
 
     // The workspace decides in the database whether offline queuing is allowed.
@@ -869,6 +1055,25 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                           labelText: 'Exact location',
                           hintText: 'e.g. Purok 4, near the creek',
                           prefixIcon: Icon(Icons.location_on_outlined))),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                      onPressed: saving || locating ? null : captureLocation,
+                      icon: locating
+                          ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                          : Icon(latitude == null
+                          ? Icons.my_location
+                          : Icons.check_circle_outline),
+                      label: Text(latitude == null
+                          ? 'Use my current location'
+                          : 'Location captured (${latitude!.toStringAsFixed(5)}, ${longitude!.toStringAsFixed(5)})')),
+                  if (locationNote != null)
+                    Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(locationNote!,
+                            style: const TextStyle(fontSize: 11, color: TugonColors.muted))),
                   const SizedBox(height: 25),
                   const SectionLabel(
                       icon: Icons.priority_high_rounded, text: 'Severity'),
