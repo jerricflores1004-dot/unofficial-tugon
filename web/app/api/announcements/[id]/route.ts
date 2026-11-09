@@ -11,7 +11,7 @@ const patch = z.object({
 }).strict();
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
-  const auth = await requireRole(['admin', 'department_head']);
+  const auth = await requireRole(['admin']);
   if ('error' in auth) return auth.error;
   const parsed = patch.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return badRequest('Invalid announcement update.');
@@ -31,7 +31,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 }
 
 export async function DELETE(_: Request, { params }: { params: { id: string } }) {
-  const auth = await requireRole(['admin', 'department_head']);
+  const auth = await requireRole(['admin']);
   if ('error' in auth) return auth.error;
   const { error } = await auth.supabase.from('announcements').delete().eq('id', params.id);
   if (error) return badRequest('Unable to remove announcement.', 500);

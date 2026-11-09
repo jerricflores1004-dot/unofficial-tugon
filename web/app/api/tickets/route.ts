@@ -6,7 +6,7 @@ const SELECT = '*, incident:incidents(id, incident_type, barangay, location_text
   + ' responder:responders!assigned_responder_id(id, name, unit), updates:ticket_updates(id)';
 
 export async function GET(request: Request) {
-  const auth = await requireRole(['staff', 'admin', 'department_head']);
+  const auth = await requireRole(['admin']);
   if ('error' in auth) return auth.error;
   const url = new URL(request.url);
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 25) || 25, 1), 100);
@@ -31,7 +31,7 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const auth = await requireRole(['staff', 'admin']);
+  const auth = await requireRole(['admin']);
   if ('error' in auth) return auth.error;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return badRequest('A valid incident is required.');

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { badRequest, requireRole } from '@/lib/server-auth';
 
 export async function GET(request: Request) {
-  const auth = await requireRole(['staff', 'admin', 'department_head']);
+  const auth = await requireRole(['admin']);
   if ('error' in auth) return auth.error;
   const value = Number(new URL(request.url).searchParams.get('days') ?? 30);
   const days = Number.isFinite(value) ? Math.min(Math.max(Math.round(value), 1), 365) : 30;

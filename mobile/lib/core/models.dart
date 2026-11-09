@@ -85,6 +85,31 @@ class ResidentNotification {
       );
 }
 
+/// The signed-in user's row in public.users (the app reads only its own row).
+class AppProfile {
+  final String role;
+  final String? agency;
+  final String? team;
+  final String fullName;
+  final bool isActive;
+
+  const AppProfile({
+    required this.role,
+    required this.agency,
+    required this.team,
+    required this.fullName,
+    required this.isActive,
+  });
+
+  factory AppProfile.fromJson(Map<String, dynamic> json) => AppProfile(
+    role: _text(json['role'], 'resident'),
+    agency: json['agency'] as String?,
+    team: json['team'] as String?,
+    fullName: _text(json['full_name']),
+    isActive: json['is_active'] != false,
+  );
+}
+
 class ResidentAnnouncement {
   final String id;
   final String title;
