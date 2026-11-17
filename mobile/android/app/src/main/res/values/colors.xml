@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Background behind the adaptive TUGON launcher icon. -->
+    <color name="ic_launcher_background">#022C93</color>
+    <!-- Background for the TUGON launch screen; sampled from the app artwork so
+         the icon and splash blend seamlessly. -->
+    <color name="splash_background">#022C93</color>
+</resources>
