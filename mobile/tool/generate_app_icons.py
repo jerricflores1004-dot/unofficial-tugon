@@ -21,6 +21,7 @@ Usage (from the `mobile/` directory):
 Requires Pillow:  pip install pillow
 """
 
+import sys
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -32,6 +33,9 @@ MASTER = MOBILE / "assets" / "icon" / "tugon_icon_1024.png"
 # wherever a platform needs an opaque square or safe-zone padding.
 NAVY = (2, 44, 147, 255)
 
+# Android 12+ splash: the launcher-masked icon layer is 240dp, and 160dp of it
+# is visible before the circular mask, so the mark is drawn inside 160dp.
+SPLASH_ICON_DP = 160
 # Android legacy launcher icon sizes (48dp * density).
 LEGACY = {
     "mipmap-mdpi": 48,
@@ -105,6 +109,15 @@ def safe_zone(art: Image.Image, size: int, scale: float = 0.72) -> Image.Image:
     return into_canvas(art, size, scale)
 
 
+def splash_icon(art: Image.Image, size: int) -> Image.Image:
+    """Android 12+ splash layer: transparent 108dp canvas, mark in 160/240."""
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    inner = max(1, round(size * SPLASH_ICON_DP / 240))
+    offset = (size - inner) // 2
+    canvas.paste(square(art, inner).convert("RGBA"), (offset, offset))
+    return canvas
+
+
 def maskable(art: Image.Image, size: int, scale: float = 0.8) -> Image.Image:
     """Maskable PWA icon: the logo mark kept inside the maskable safe circle."""
     return into_canvas(art, size, scale)
@@ -127,7 +140,7 @@ def main() -> None:
     for folder, px in ADAPTIVE.items():
         write(res / folder / "ic_launcher_foreground.png", safe_zone(art, px), f"({px}px)")
     for folder, px in SPLASH.items():
-        write(res / folder / "splash_icon.png", safe_zone(art, px), f"({px}px)")
+        write(res / folder / "splash_icon.png", splash_icon(art, px), f"({px}px)")
 
     write(web / "icons" / "Icon-192.png", square(art, 192), "(192px)")
     write(web / "icons" / "Icon-512.png", square(art, 512), "(512px)")
@@ -142,4 +155,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except FileNotFoundError:
+        sys.exit(
+            f"Master artwork not found: {MASTER}\n"
+            "Save the TUGON logo as a square PNG at that path first."
+        )
