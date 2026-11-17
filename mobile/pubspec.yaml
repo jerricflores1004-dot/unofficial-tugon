@@ -28,3 +28,5 @@
     uses-material-design: true
     assets:
       - .env
+      # TUGON logo, also the source for every generated launcher icon.
+      - assets/icon/tugon_icon_1024.png

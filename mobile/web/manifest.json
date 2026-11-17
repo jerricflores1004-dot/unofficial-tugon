@@ -1,11 +1,11 @@
 {
-    "name": "tugon_mobile",
-    "short_name": "tugon_mobile",
+    "name": "TUGON — MDRRMO Mabini",
+    "short_name": "TUGON",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#022C93",
+    "theme_color": "#022C93",
+    "description": "Report and track incidents with MDRRMO Mabini.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

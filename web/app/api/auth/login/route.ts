@@ -3,18 +3,33 @@ import { z } from 'zod';
 import { createServerSupabase } from '@/lib/supabase-server';
 import { isWebRole } from '@/lib/web-access';
 
-const schema = z.object({ email: z.string().email(), password: z.string().min(8) });
+export const runtime = 'nodejs';
+
+const schema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+  // Unticked "Remember me" gives a session that ends with the browser.
+  remember: z.boolean().optional().default(true),
+});
 
 export async function POST(request: Request) {
-  const body = schema.safeParse(await request.json());
-  if (!body.success) return NextResponse.json({ error: 'Invalid sign-in details.' }, { status: 400 });
+  const body = schema.safeParse(await request.json().catch(() => null));
+  if (!body.success) {
+    return NextResponse.json({ error: 'Invalid sign-in details.' }, { status: 400 });
+  }
 
   const supabase = await createServerSupabase();
-  if (!supabase) return NextResponse.json({ error: 'Authentication service is not configured.' }, { status: 503 });
+  if (!supabase) {
+    return NextResponse.json({ error: 'Authentication service is not configured.' }, { status: 503 });
+  }
 
-  const { data, error } = await supabase.auth.signInWithPassword(body.data);
+  const { email, password, remember } = body.data;
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) console.error('LOGIN ERROR:', error.message);
-  if (error || !data.user) return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 });
+  if (error || !data.user) {
+    return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 });
+  }
 
   const { data: profile } = await supabase
     .from('users')
@@ -30,5 +45,17 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ user: data.user, session: data.session });
+  const response = NextResponse.json({ user: data.user, session: data.session });
+
+  if (!remember) {
+    // Drop the max-age from every Supabase cookie so it becomes a session
+    // cookie: the user is signed out when the browser closes.
+    for (const cookie of response.cookies.getAll()) {
+      if (cookie.name.startsWith('sb-')) {
+        response.cookies.set(cookie.name, cookie.value, { ...cookie, maxAge: undefined });
+      }
+    }
+  }
+
+  return response;
 }

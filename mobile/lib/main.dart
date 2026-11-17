@@ -344,18 +344,26 @@ String relativeTimestamp(DateTime? at) {
   return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
 }
 
+/// The TUGON app mark. Uses the same artwork that ships as the launcher icon,
+/// so the identity matches the icon on the phone's home screen.
 class LogoMark extends StatelessWidget {
   const LogoMark({super.key, this.large = false});
   final bool large;
 
+  static const asset = 'assets/icon/tugon_icon_1024.png';
+
   @override
   Widget build(BuildContext context) => Row(children: [
-        Container(
-            width: large ? 46 : 38,
-            height: large ? 46 : 38,
-            decoration: BoxDecoration(
-                color: TugonColors.navy, borderRadius: BorderRadius.circular(13)),
-            child: const Icon(Icons.shield_outlined, color: Colors.white)),
+        Semantics(
+            label: 'TUGON',
+            image: true,
+            child: Container(
+                width: large ? 58 : 44,
+                height: large ? 58 : 44,
+                decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(large ? 16 : 12)),
+                clipBehavior: Clip.antiAlias,
+                child: Image.asset(asset, fit: BoxFit.cover))),
         const SizedBox(width: 10),
         const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('TUGON',

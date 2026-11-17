@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowRight, Database, Eye, EyeOff, LockKeyhole, Mail, Shield, TriangleAlert } from 'lucide-react';
 import { Button, Spinner } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -21,6 +21,13 @@ const TITLES: Record<Mode, string> = {
   reset: 'Reset your password',
   responder: 'Responder sign in',
 };
+// Messages the middleware appends when it bounces a visitor here.
+const REASONS: Record<string, string> = {
+  unauthorized: 'This portal is for MDRRMO staff. Residents, please use the TUGON mobile app.',
+  configuration: 'This deployment is missing its database configuration. Contact the TUGON system administrator.',
+  auth: 'That sign-in link is invalid or has expired. Request a new one.',
+};
+
 const SUBTITLES: Record<Mode, string> = {
   signin: 'Sign in to continue to your response workspace.',
   reset: 'Supabase Auth will email you a reset link.',
@@ -35,6 +42,39 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [agency, setAgency] = useState<Agency | ''>('');
+  const [remember, setRemember] = useState(true);
+  // The build may not know the deployment's database settings, so the server
+  // is asked at runtime and the form unlocks as soon as it answers.
+  // `null` means "still asking"; the banner only appears once the answer is no.
+  const [databaseReady, setDatabaseReady] = useState<boolean | null>(
+    isSupabaseConfigured ? true : null
+  );
+
+  useEffect(() => {
+    if (isSupabaseConfigured) return;
+    let cancelled = false;
+    void fetch('/api/config', { cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { supabaseConfigured?: boolean } | null) => {
+        if (!cancelled) setDatabaseReady(Boolean(data?.supabaseConfigured));
+      })
+      .catch(() => {
+        if (!cancelled) setDatabaseReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Surface the reason the middleware redirected here. Read from
+  // `window.location` rather than `useSearchParams` so the page keeps its
+  // server-rendered markup (no Suspense boundary, no layout flash).
+  useEffect(() => {
+    const reason = new URLSearchParams(window.location.search).get('error');
+    if (reason && REASONS[reason]) {
+      setError(REASONS[reason]);
+    }
+  }, []);
 
   function switchMode(next: Mode) {
     setMode(next);
@@ -47,7 +87,11 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
     try {
-      await request('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+      // `remember` decides whether the session cookie survives a browser restart.
+      await request('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password, remember }),
+      });
       router.replace('/dashboard');
       router.refresh();
     } catch (cause) {
@@ -116,7 +160,7 @@ export default function LoginPage() {
           </div>
         </div>
         <div className="flex items-center gap-8 text-xs text-blue-100/70">
-          <span className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${isSupabaseConfigured ? 'bg-emerald-400' : 'bg-amber-400'}`} />{isSupabaseConfigured ? 'Database connected' : 'Database not configured'}</span>
+          <span className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${databaseReady === null ? 'bg-slate-400' : databaseReady ? 'bg-emerald-400' : 'bg-amber-400'}`} />{databaseReady === null ? 'Checking the database…' : databaseReady ? 'Database connected' : 'Database not configured'}</span>
           <span>Supabase Auth · RLS enforced</span>
         </div>
       </section>
@@ -130,7 +174,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {!isSupabaseConfigured && <div role="alert" className="mb-6 flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-4 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          {databaseReady === false && <div role="alert" className="mb-6 flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-4 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
             <Database size={16} className="mt-0.5 shrink-0" />
             <span><strong>Database not configured.</strong><br />Set <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>, then apply the migrations with <code>supabase db push</code>. This workspace has no sample data to fall back on.</span>
           </div>}
@@ -169,7 +213,7 @@ export default function LoginPage() {
 
             <div className="flex items-center justify-between">
               {mode === 'signin'
-                ? <label className="flex items-center gap-2 text-xs text-slate-500"><input type="checkbox" name="remember" className="h-4 w-4 rounded border-slate-300 text-blue focus:ring-blue" />Remember me</label>
+                ? <label className="flex items-center gap-2 text-xs text-slate-500"><input type="checkbox" name="remember" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-blue focus:ring-blue" />Remember me</label>
                 : <span />}
               <button type="button" onClick={() => switchMode(mode === 'reset' ? 'signin' : 'reset')} className="text-xs font-bold text-blue hover:underline">
                 {mode === 'reset' ? 'Back to sign in' : 'Forgot password?'}
@@ -179,7 +223,7 @@ export default function LoginPage() {
             {error && <div role="alert" className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"><TriangleAlert size={16} className="shrink-0" />{error}</div>}
             {notice && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">{notice}</div>}
 
-            <Button type="submit" className="w-full" disabled={loading || !isSupabaseConfigured}>
+            <Button type="submit" className="w-full" disabled={loading || databaseReady !== true}>
               {loading
                 ? <><Spinner /> {mode === 'reset' ? 'Sending…' : 'Signing in…'}</>
                 : mode === 'reset' ? <>Send reset link <ArrowRight size={16} /></>

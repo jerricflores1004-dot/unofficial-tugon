@@ -3,7 +3,14 @@ import { createServerClient } from '@supabase/ssr';
 import type { SetAllCookies } from '@supabase/ssr';
 import { isWebRole } from '@/lib/web-access';
 
-const PUBLIC_PREFIXES = ['/login', '/api/auth', '/api/push'];
+const PUBLIC_PREFIXES = [
+  '/login',
+  '/api/auth',
+  '/api/config',
+  '/api/push',
+  '/auth/callback',
+  '/reset-password',
+];
 
 const PUBLIC_PAGES = ['/', '/about', '/contact'];
 
@@ -97,5 +104,8 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  // Static assets (icons, favicon, images) must never hit auth redirects.
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|apple-icon.png|icon.png|.*\\.(?:png|jpg|jpeg|svg|ico|webp|txt|xml|webmanifest)$).*)',
+  ],
 };
