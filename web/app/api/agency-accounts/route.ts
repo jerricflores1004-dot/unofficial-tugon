@@ -3,10 +3,9 @@ import { badRequest, requireRole } from '@/lib/server-auth';
 import { createAdminClient } from '@/lib/supabase-admin';
 
 const AGENCIES = ['bfp', 'pnp', 'coast_guard'] as const;
-const ALLOWED_ROLES = ['admin'];
 
 export async function GET() {
-  const auth = await requireRole([]'admin']);
+  const auth = await requireRole(['admin']);
   if ('error' in auth) return auth.error;
 
   const admin = createAdminClient();
@@ -23,7 +22,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireRole(ALLOWED_ROLES);
+  const auth = await requireRole(['admin']);
   if ('error' in auth) return auth.error;
 
   const admin = createAdminClient();
@@ -36,10 +35,16 @@ export async function POST(request: Request) {
   const phone = String(body?.phone ?? '').trim();
   const password = String(body?.password ?? '');
 
-  if (!AGENCIES.includes(agency)) return badRequest('Choose a valid agency.');
+  if (!(AGENCIES as readonly string[]).includes(agency)) {
+    return badRequest('Choose a valid agency.');
+  }
   if (!fullName) return badRequest('Account name is required.');
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return badRequest('Enter a valid email address.');
-  if (password.length < 8) return badRequest('Password must be at least 8 characters.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return badRequest('Enter a valid email address.');
+  }
+  if (password.length < 8) {
+    return badRequest('Password must be at least 8 characters.');
+  }
 
   // One account per agency.
   const { data: existing, error: lookupError } = await admin
@@ -90,7 +95,16 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json(
-    { data: { id: userId, email, full_name: fullName, phone: phone || null, agency, is_active: true } },
+    {
+      data: {
+        id: userId,
+        email,
+        full_name: fullName,
+        phone: phone || null,
+        agency,
+        is_active: true,
+      },
+    },
     { status: 201 },
   );
 }
