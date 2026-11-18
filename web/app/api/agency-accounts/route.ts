@@ -6,7 +6,7 @@ const AGENCIES = ['bfp', 'pnp', 'coast_guard'] as const;
 const ALLOWED_ROLES = ['admin'];
 
 export async function GET() {
-  const auth = await requireRole(ALLOWED_ROLES);
+  const auth = await requireRole([]'admin']);
   if ('error' in auth) return auth.error;
 
   const admin = createAdminClient();
