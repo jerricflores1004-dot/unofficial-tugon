@@ -24,14 +24,9 @@ type FieldTeam = {
 type Credentials = { name: string; email: string; password: string; note?: string };
 type TeamResult = { team: FieldTeam; tempPassword?: string; sessionsRevoked?: boolean };
 
-const TEAM_OPTIONS: { value: TeamKey; label: string }[] = [
-  { value: 'alpha', label: 'Team Alpha' },
-  { value: 'bravo', label: 'Team Bravo' },
-  { value: 'charlie', label: 'Team Charlie' },
-];
-
 const STATUS: Record<string, { label: string; dot: string; text: string }> = {
   available: { label: 'Available', dot: 'bg-blue', text: 'text-blue' },
+  assigned: { label: 'Assigned', dot: 'bg-purple-500', text: 'text-purple-600' },
   en_route: { label: 'En route', dot: 'bg-amber-500', text: 'text-amber-600' },
   on_scene: { label: 'On scene', dot: 'bg-emerald-500', text: 'text-emerald-600' },
   offline: { label: 'Offline', dot: 'bg-slate-400', text: 'text-slate-500' },
@@ -40,6 +35,7 @@ const STATUS: Record<string, { label: string; dot: string; text: string }> = {
 
 function stateOf(team: FieldTeam): string {
   if (!team.is_active) return 'deactivated';
+  if (team.current_incident && (team.status === 'available' || team.status === 'offline')) return 'assigned';
   return STATUS[team.status] ? team.status : 'offline';
 }
 
@@ -56,10 +52,9 @@ export function FieldTeamsView() {
   const teams = useApi<FieldTeam[]>('/api/field-teams');
   const all = useMemo(() => teams.data ?? [], [teams.data]);
   const list = useMemo(() => (filter === 'all' ? all : all.filter((team) => stateOf(team) === filter)), [all, filter]);
-  const freeTeams = useMemo(() => TEAM_OPTIONS.filter((option) => !all.some((team) => team.team === option.value)), [all]);
 
   const active = all.filter((team) => team.is_active);
-  const available = active.filter((team) => team.status === 'available').length;
+  const available = active.filter((team) => stateOf(team) === 'available').length;
   const attached = active.filter((team) => team.current_incident).length;
 
   if (teams.error) return <ErrorState title="Unable to load field teams" detail={teams.error} onRetry={teams.reload} />;
@@ -76,7 +71,7 @@ export function FieldTeamsView() {
         <div>
           <h3 className="text-sm font-bold text-navy dark:text-white">Field staff accounts</h3>
           <p className="mt-1 text-xs text-slate-500">
-            {teams.loading ? 'Loading teams...' : `${list.length} of ${all.length} teams shown`}. Shared team logins for MDRRMO observers who ride along with dispatched agencies and send situation reports.
+            {teams.loading ? 'Loading teams...' : `${list.length} of ${all.length} teams shown`}. Shared team logins for MDRRMO observers who ride along with dispatched agencies.
           </p>
         </div>
         <div className="flex gap-2">
@@ -88,7 +83,7 @@ export function FieldTeamsView() {
             </select>
             <ChevronDown size={14} className="pointer-events-none absolute right-3 text-slate-400" />
           </label>
-          <Button size="sm" disabled={freeTeams.length === 0} title={freeTeams.length === 0 ? 'All three teams already have an account' : undefined} onClick={() => setPanel({ team: null })}>
+          <Button size="sm" onClick={() => setPanel({ team: null })}>
             <Plus size={15} /> Add field team
           </Button>
         </div>
@@ -97,7 +92,7 @@ export function FieldTeamsView() {
       {teams.loading && all.length === 0
         ? <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">{[0, 1, 2].map((card) => <LoadingSkeleton key={card} className="h-[190px] w-full rounded-xl" />)}</div>
         : list.length === 0
-          ? <div className="p-6"><EmptyState title={all.length === 0 ? 'No field teams yet' : 'No teams match this filter'} detail={all.length === 0 ? 'Create the shared logins for Team Alpha, Bravo and Charlie. They sign in on the mobile app only.' : 'Try another status.'} action={all.length === 0 ? <Button size="sm" onClick={() => setPanel({ team: null })}><Plus size={14} /> Add field team</Button> : undefined} /></div>
+          ? <div className="p-6"><EmptyState title={all.length === 0 ? 'No field teams yet' : 'No teams match this filter'} detail={all.length === 0 ? 'Create a shared login for each MDRRMO field team. They sign in on the mobile app only.' : 'Try another status.'} action={all.length === 0 ? <Button size="sm" onClick={() => setPanel({ team: null })}><Plus size={14} /> Add field team</Button> : undefined} /></div>
           : <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
             {list.map((team) => <TeamCard key={team.id} team={team} onEdit={() => setPanel({ team })} onChanged={teams.reload} onToast={setToast} onCredentials={setCredentials} />)}
           </div>}
@@ -105,7 +100,6 @@ export function FieldTeamsView() {
 
     {panel && <TeamPanel
       team={panel.team}
-      freeTeams={freeTeams}
       onClose={() => setPanel(null)}
       onDone={(message, creds) => { setPanel(null); setToast(message); if (creds) setCredentials(creds); teams.reload(); }}
     />}
@@ -217,14 +211,13 @@ function MenuItem({ icon: Icon, children, onClick, danger = false }: { icon: typ
   </button>;
 }
 
-function TeamPanel({ team, freeTeams, onClose, onDone }: {
+function TeamPanel({ team, onClose, onDone }: {
   team: FieldTeam | null;
-  freeTeams: { value: TeamKey; label: string }[];
   onClose: () => void;
   onDone: (message: string, credentials?: Credentials) => void;
 }) {
   const editing = team !== null;
-  const [teamKey, setTeamKey] = useState<string>(freeTeams[0]?.value ?? '');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [contact, setContact] = useState(team?.contact_number ?? '');
   const [members, setMembers] = useState((team?.members ?? []).join('\n'));
@@ -242,7 +235,7 @@ function TeamPanel({ team, freeTeams, onClose, onDone }: {
         onDone(`${team.name} was updated.`);
       } else {
         const result = await sendResource<TeamResult>('/api/field-teams', 'POST', {
-          team: teamKey,
+          name: name.trim(),
           email: email.trim(),
           contactNumber: contact.trim() || undefined,
           members: memberList,
@@ -258,19 +251,15 @@ function TeamPanel({ team, freeTeams, onClose, onDone }: {
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
     <form onSubmit={submit} className="w-full max-w-lg rounded-2xl border border-white bg-[#f1f5f9] p-6 shadow-2xl dark:border-slate-700 dark:bg-[#1f2937]">
       <div className="mb-4 flex items-start justify-between gap-3">
-        <PanelHeader title={editing ? `Edit ${team.name}` : 'Add field team'} detail={editing ? 'Update the contact number and the list of team members.' : 'Creates a shared login for the mobile app. A temporary password is shown once.'} />
+        <PanelHeader title={editing ? `Edit ${team.name}` : 'Add field team'} detail={editing ? 'Update the contact number and the list of team members.' : 'Type the team name. This creates a shared login for the mobile app, with a temporary password shown once.'} />
         <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:text-navy" aria-label="Close"><X size={18} /></button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {!editing && <>
-          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">Team
-            <select required value={teamKey} onChange={(event) => setTeamKey(event.target.value)} className="inset-control mt-1.5 block h-10 w-full px-3 text-sm dark:text-white">
-              {freeTeams.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
+          <TextField label="Team name" value={name} onChange={setName} required placeholder="e.g. Team Alpha" />
           <TextField label="Login email" type="email" value={email} onChange={setEmail} required placeholder="alpha@yourdomain.com" />
         </>}
-        <div className={editing ? 'sm:col-span-2' : 'sm:col-span-2'}>
+        <div className="sm:col-span-2">
           <TextField label="Contact number" value={contact} onChange={setContact} placeholder="Optional" />
         </div>
         <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 sm:col-span-2">Team members (one name per line)
@@ -280,7 +269,7 @@ function TeamPanel({ team, freeTeams, onClose, onDone }: {
       {failure && <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">{failure}</p>}
       <div className="mt-5 flex justify-end gap-2">
         <Button type="button" variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
-        <Button type="submit" size="sm" disabled={busy || (!editing && freeTeams.length === 0)}>{busy ? 'Saving...' : editing ? 'Save changes' : 'Create team'}</Button>
+        <Button type="submit" size="sm" disabled={busy}>{busy ? 'Saving...' : editing ? 'Save changes' : 'Create team'}</Button>
       </div>
     </form>
   </div>;

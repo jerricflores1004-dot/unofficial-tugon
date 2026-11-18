@@ -868,13 +868,36 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
 
   Future<void> pickPhotos(int limit) async {
     try {
-      final picked = await picker.pickMultiImage();
+      final picked = await picker.pickMultiImage(imageQuality: 80, maxWidth: 1600);
       if (!mounted) return;
-      setState(() => photos = picked.take(limit).toList());
+      final known = photos.map((p) => p.path).toSet();
+      setState(() => photos = [
+        ...photos,
+        ...picked.where((p) => !known.contains(p.path)),
+      ].take(limit).toList());
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Photos could not be selected.')));
+      }
+    }
+  }
+
+  Future<void> capturePhoto(int limit) async {
+    if (photos.length >= limit) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('You can attach up to $limit photos.')));
+      return;
+    }
+    try {
+      final shot = await picker.pickImage(
+          source: ImageSource.camera, imageQuality: 80, maxWidth: 1600);
+      if (shot == null || !mounted) return;
+      setState(() => photos = [...photos, shot]);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('The camera could not be opened.')));
       }
     }
   }
@@ -1078,6 +1101,34 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                       label: Text(latitude == null
                           ? 'Use my current location'
                           : 'Location captured (${latitude!.toStringAsFixed(5)}, ${longitude!.toStringAsFixed(5)})')),
+                  if (locationNote != null)
+                    Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(locationNote!,
+                            style: const TextStyle(fontSize: 11, color: TugonColors.muted))),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(
+                        child: OutlinedButton.icon(
+                            onPressed: saving || photos.length >= photoLimit
+                                ? null
+                                : () => capturePhoto(photoLimit),
+                            icon: const Icon(Icons.photo_camera_outlined),
+                            label: const Text('Take photo'))),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: OutlinedButton.icon(
+                            onPressed: saving || photos.length >= photoLimit
+                                ? null
+                                : () => pickPhotos(photoLimit),
+                            icon: const Icon(Icons.photo_library_outlined),
+                            label: const Text('Upload'))),
+                  ]),
+                  Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text('${photos.length} of $photoLimit photos',
+                          style: const TextStyle(
+                              fontSize: 11, color: TugonColors.muted))),
                   if (locationNote != null)
                     Padding(
                         padding: const EdgeInsets.only(top: 6),
