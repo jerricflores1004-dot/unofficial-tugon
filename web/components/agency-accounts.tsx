@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Plus, ShieldCheck, TriangleAlert, UserX } from 'lucide-react';
 
 type Agency = 'bfp' | 'pnp' | 'coast_guard';
@@ -57,7 +57,7 @@ export function AgencyAccounts() {
     setFormError('');
   }
 
-  async function submit(event: React.FormEvent) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!creating) return;
     setSaving(true);
