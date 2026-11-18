@@ -13,6 +13,7 @@ import { useApi, useApiGroup } from '@/lib/use-api';
 import { dayLabel, mapIncident, mapIncidentPhoto, mapIncidentUpdate, mapResponder, roleLabel } from '@/lib/mappers';
 import { relativeTime } from '@/lib/format';
 import type { Incident, IncidentPhoto, IncidentUpdate, IncidentStatus, Responder, WorkspaceSummary } from '@/lib/types';
+import { ResponsePanel } from '@/components/response-panel';
 
 type IncidentDetailRow = Record<string, any>;
 
@@ -46,7 +47,7 @@ export default function IncidentDetailPage({ params }: { params: { id: string } 
   const reporter = detail.data?.reporter;
   const verifier = detail.data?.verifier;
   const ticketRow = Array.isArray(detail.data?.ticket) ? detail.data?.ticket[0] : detail.data?.ticket;
-  const canManage = ['staff', 'admin', 'department_head'].includes(workspace.data?.profile?.role ?? '');
+  const canManage = workspace.data?.profile?.role === 'admin';
 
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -101,28 +102,21 @@ export default function IncidentDetailPage({ params }: { params: { id: string } 
             {incident.latitude !== null && incident.longitude !== null && <p className="mt-1 text-[11px] text-slate-400">Stored coordinates: {incident.latitude.toFixed(5)}, {incident.longitude.toFixed(5)}</p>}
           </div>
           {canManage && <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" size="sm" disabled={busy !== null || rejected} onClick={() => void patch({ status: 'rejected' }, 'Incident rejected.')}>
-              {busy === 'Incident rejected.' ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />} Reject
-            </Button>
-            {incident.status === 'pending' && <Button size="sm" disabled={busy !== null} onClick={() => void patch({ status: 'verified' }, 'Incident verified.')}>
-              {busy === 'Incident verified.' ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={15} />} Verify incident
-            </Button>}
-            {incident.status === 'verified' && <Button size="sm" disabled={busy !== null} onClick={() => void patch({ status: 'responding' }, 'Response marked as underway.')}>
-              {busy === 'Response marked as underway.' ? <Loader2 size={14} className="animate-spin" /> : <Users size={15} />} Start response
-            </Button>}
-            {['responding', 'verified'].includes(incident.status) && <Button size="sm" disabled={busy !== null} onClick={() => void patch({ status: 'resolved' }, 'Resolution recorded.')}>
-              {busy === 'Resolution recorded.' ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={15} />} Resolve
-            </Button>}
-            {incident.status === 'resolved' && <Button size="sm" disabled={busy !== null} onClick={() => void patch({ status: 'closed' }, 'Incident closed.')}>
-              {busy === 'Incident closed.' ? <Loader2 size={14} className="animate-spin" /> : <Shield size={15} />} Close
-            </Button>}
-          </div>}
+                      <Button variant="secondary" size="sm" disabled={busy !== null || !['pending', 'verified'].includes(incident.status)} onClick={() => void patch({ status: 'rejected' }, 'Incident rejected.')}>
+                        {busy === 'Incident rejected.' ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />} Reject
+                      </Button>
+                      {incident.status === 'pending' && <Button size="sm" disabled={busy !== null} onClick={() => void patch({ status: 'verified' }, 'Incident verified.')}>
+                        {busy === 'Incident verified.' ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={15} />} Verify incident
+                      </Button>}
+                      {incident.status === 'resolved' && <Button size="sm" disabled={busy !== null} onClick={() => void patch({ status: 'closed' }, 'Incident closed.')}>
+                        {busy === 'Incident closed.' ? <Loader2 size={14} className="animate-spin" /> : <Shield size={15} />} Close
+                      </Button>}
+                    </div>}
         </div>
 
         <div className="mt-5 grid gap-4 border-t border-slate-200/70 pt-5 sm:grid-cols-4 dark:border-slate-700">
           <Detail label="Reported" value={`${dayLabel(incident.reported_at)} · ${new Date(incident.reported_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}`} />
           <Detail label="Affected people" value={`${incident.affected_people} reported`} />
-          <Detail label="Assigned responder" value={incident.assigned_to || 'Unassigned'} />
           <Detail label="Priority reason" value={incident.severity === 'critical' ? 'Critical severity' : incident.severity === 'high' && incident.vulnerable_groups.length > 0 ? 'High severity with a vulnerable group' : `Severity set to ${incident.severity}`} />
         </div>
       </div>
@@ -190,6 +184,13 @@ export default function IncidentDetailPage({ params }: { params: { id: string } 
           </section>
         </div>
 
+        {canManage && <ResponsePanel
+                            ticketId={ticketRow?.id ?? null}
+                            incidentId={incident.id}
+                    closed={['rejected', 'resolved', 'closed'].includes(incident.status)}
+                    onChanged={() => { detail.reload(); workspace.reload(); }}
+                  />}
+
         <aside className="space-y-5">
           <section className="surface p-5">
             <SectionHeading icon={UserRound} title="Reporter information" />
@@ -203,36 +204,6 @@ export default function IncidentDetailPage({ params }: { params: { id: string } 
                 {reporter?.barangay && <p className="mt-0.5 truncate text-[10px] text-slate-400">Barangay: {reporter.barangay}</p>}
               </div>
             </div>
-          </section>
-
-          <section className="surface p-5">
-            <SectionHeading icon={Users} title="Response team" />
-            <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-              <div className="flex items-center gap-2">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"><Users size={15} /></span>
-                <div className="min-w-0"><p className="truncate text-xs font-bold text-slate-700 dark:text-slate-200">{incident.assigned_to || 'No team assigned'}</p><p className="truncate text-[10px] text-slate-500">{incident.assigned_to ? 'Assignment stored on the incident' : 'Assign a responder to begin'}</p></div>
-              </div>
-            </div>
-            {canManage && <>
-              <label className="mt-3 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Assign from the roster
-                <select
-                  value={assignment}
-                  disabled={roster.loading || roster.error !== null}
-                  onChange={(event) => setAssignment(event.target.value)}
-                  className="inset-control mt-1.5 block h-10 w-full px-3 text-xs dark:text-white"
-                >
-                  <option value="">{roster.error ? 'Roster unavailable' : roster.loading ? 'Loading roster…' : 'Unassigned'}</option>
-                  {responders.map((responder) => <option key={responder.id} value={responder.id}>{responder.name} · {responder.unit} ({responder.availability})</option>)}
-                </select>
-              </label>
-              <Button
-                variant="secondary" size="sm" className="mt-3 w-full" disabled={busy !== null || roster.error !== null}
-                onClick={() => void patch({ assignedResponderId: assignment || null }, assignment ? 'Responder assigned.' : 'Assignment cleared.')}
-              >
-                {busy !== null ? <Loader2 size={14} className="animate-spin" /> : <Users size={14} />} {assignment ? 'Save assignment' : 'Clear assignment'}
-              </Button>
-              {roster.error && <p className="mt-2 text-[10px] text-red-600 dark:text-red-300">{roster.error}</p>}
-            </>}
           </section>
 
           <section className="surface p-5">

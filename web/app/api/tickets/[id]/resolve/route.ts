@@ -21,7 +21,7 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
 
   const { data: rows, error } = await admin
     .from('ticket_dispatches')
-    .select('status')
+    .select('id, status')
     .eq('ticket_id', ticket.id);
   if (error) return badRequest('Unable to check the dispatches.', 500);
 
@@ -43,6 +43,31 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
     .update({ status: 'resolved' })
     .eq('id', ticket.id);
   if (ticketError) console.error('RESOLVE: ticket status not updated', ticketError.message);
+
+  // Release the field teams that rode along on this incident (best effort).
+  const dispatchIds = (rows ?? []).map((row: { id: string }) => row.id);
+  if (dispatchIds.length > 0) {
+    const { data: attached } = await admin
+      .from('dispatch_observers')
+      .select('field_team_id')
+      .in('dispatch_id', dispatchIds);
+    const teamIds = Array.from(new Set((attached ?? []).map((row: { field_team_id: string }) => row.field_team_id)));
+
+    const { error: observerError } = await admin
+      .from('dispatch_observers')
+      .update({ status: 'done', updated_at: now })
+      .in('dispatch_id', dispatchIds);
+    if (observerError) console.error('RESOLVE: observers not released', observerError.message);
+
+    if (teamIds.length > 0) {
+      const { error: teamError } = await admin
+        .from('field_teams')
+        .update({ current_incident_id: null, status: 'available' })
+        .in('id', teamIds)
+        .eq('current_incident_id', ticket.incident_id);
+      if (teamError) console.error('RESOLVE: field teams not released', teamError.message);
+    }
+  }
 
   return NextResponse.json({ ok: true });
 }

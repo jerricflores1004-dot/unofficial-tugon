@@ -3,7 +3,7 @@ import { ResponderView } from '@/components/responder-view';
 
 export default function ResponderPage() {
   return (
-    <AppShell title="Dispatches" eyebrow="Agency / Incoming">
+    <AppShell title="Dispatches" eyebrow="Agency / Incoming" variant="agency">
       <ResponderView />
     </AppShell>
   );

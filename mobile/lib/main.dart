@@ -13,6 +13,7 @@ import 'core/theme.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'core/push.dart';
+import 'field/field_home.dart';
 
 final supabaseProvider = Provider<SupabaseClient>((ref) => Supabase.instance.client);
 final apiProvider = Provider<TugonApi>((ref) => TugonApi(ref.watch(supabaseProvider)));
@@ -226,7 +227,7 @@ class RoleGate extends ConsumerWidget {
             case 'resident':
               return const HomeScreen();
             case 'staff':
-              return StaffHomeScreen(profile: p);
+              return FieldHomeScreen(profile: p);
             default:
               return const GateMessage(
                   icon: Icons.desktop_windows_outlined,
@@ -927,10 +928,17 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
       failure = null;
     });
 
+    final typedLocation = location.text.trim();
+    final locationText = typedLocation.isNotEmpty
+        ? typedLocation
+        : (latitude != null
+        ? 'GPS location (${latitude!.toStringAsFixed(5)}, ${longitude!.toStringAsFixed(5)})'
+        : '');
+
     final payload = <String, dynamic>{
       'incident_type': label,
       'description': description.text.trim(),
-      'location_text': location.text.trim(),
+      'location_text': locationText,
       'barangay': barangay.text.trim(),
       'severity': severity,
       'affected_people': int.tryParse(affectedPeople.text.trim()) ?? 0,
@@ -1048,11 +1056,12 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                   const SizedBox(height: 14),
                   TextFormField(
                       controller: location,
-                      validator: (value) => value == null || value.trim().isEmpty
-                          ? 'Location is required.'
+                      validator: (value) =>
+                      (value == null || value.trim().isEmpty) && latitude == null
+                          ? 'Add where it happened, or tap "Use my current location".'
                           : null,
                       decoration: const InputDecoration(
-                          labelText: 'Exact location',
+                          labelText: 'Exact location (optional with GPS)',
                           hintText: 'e.g. Purok 4, near the creek',
                           prefixIcon: Icon(Icons.location_on_outlined))),
                   const SizedBox(height: 12),
