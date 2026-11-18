@@ -28,12 +28,14 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if ('error' in auth) return auth.error;
   const parsed = update.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return badRequest('Invalid incident update.');
-
+    if (parsed.data.status === 'responding' || parsed.data.status === 'resolved') {
+      return badRequest('Responding and resolved are set by the dispatch workflow, not by hand.', 409);
+    }
   const values: Record<string, unknown> = {};
   if (parsed.data.status) {
     values.status = parsed.data.status;
     if (parsed.data.status === 'verified') { values.verified_by = auth.user.id; values.verified_at = new Date().toISOString(); }
-    if (parsed.data.status === 'resolved') values.resolved_at = new Date().toISOString();
+
   }
   if (parsed.data.assignedResponderId !== undefined) values.assigned_responder_id = parsed.data.assignedResponderId;
 

@@ -37,7 +37,7 @@ function NavItem({ item, collapsed }: { item: NavEntry; collapsed: boolean }) {
   </Link>;
 }
 
-export function AppShell({ children, title, eyebrow, action }: { children: React.ReactNode; title: string; eyebrow?: string; action?: React.ReactNode }) {
+export function AppShell({ children, title, eyebrow, action, variant }: { children: React.ReactNode; title: string; eyebrow?: string; action?: React.ReactNode; variant?: 'agency' }) {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -48,7 +48,8 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   const summary = useApi<WorkspaceSummary>('/api/workspace/summary');
   const { reload: reloadSummary } = summary;
   const profile = summary.data?.profile ?? null;
-  const agencyAccount = profile?.role === 'department_head';
+  const agencyAccount = variant === 'agency' || profile?.role === 'department_head';
+  const roleText = summary.loading && !profile ? 'Loading…' : roleLabel(profile?.role ?? null);
   const displayName = profile?.full_name || profile?.email || 'Signed-in user';
   const refresh = useCallback(() => reloadSummary(), [reloadSummary]);
 
