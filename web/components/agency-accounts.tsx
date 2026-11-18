@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ShieldCheck, TriangleAlert, UserX } from 'lucide-react';
+import { Plus, ShieldCheck, TriangleAlert, UserX } from 'lucide-react';
 
 type Agency = 'bfp' | 'pnp' | 'coast_guard';
 type Account = {
@@ -19,9 +19,17 @@ const AGENCIES: { value: Agency; label: string }[] = [
   { value: 'coast_guard', label: 'Philippine Coast Guard' },
 ];
 
+const emptyForm = { full_name: '', email: '', phone: '', password: '' };
+const inputClass =
+  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-navy outline-none focus:border-blue dark:border-slate-700 dark:bg-slate-900 dark:text-white';
+
 export function AgencyAccounts() {
   const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [error, setError] = useState('');
+  const [creating, setCreating] = useState<Agency | null>(null);
+  const [form, setForm] = useState(emptyForm);
+  const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -37,11 +45,45 @@ export function AgencyAccounts() {
 
   useEffect(() => { void load(); }, [load]);
 
+  function openForm(agency: Agency) {
+    setCreating(agency);
+    setForm(emptyForm);
+    setFormError('');
+  }
+
+  function closeForm() {
+    setCreating(null);
+    setForm(emptyForm);
+    setFormError('');
+  }
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!creating) return;
+    setSaving(true);
+    setFormError('');
+    try {
+      const res = await fetch('/api/agency-accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, agency: creating }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? 'Unable to create the account.');
+      closeForm();
+      await load();
+    } catch (cause) {
+      setFormError(cause instanceof Error ? cause.message : 'Unable to create the account.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return <section className="surface p-5">
     <div className="mb-4 flex items-start justify-between gap-3">
       <div>
         <h3 className="text-sm font-bold text-navy dark:text-white">Agency accounts</h3>
-        <p className="mt-1 text-xs text-slate-500">One sign-in account per agency. These receive dispatches in the responder workspace. Accounts are created in Supabase.</p>
+        <p className="mt-1 text-xs text-slate-500">One sign-in account per agency. These receive dispatches in the responder workspace.</p>
       </div>
       <button type="button" onClick={() => void load()} className="rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-bold text-slate-500 hover:text-blue dark:border-slate-700">Refresh</button>
     </div>
@@ -67,7 +109,24 @@ export function AgencyAccounts() {
                 {account.is_active ? 'Active' : 'Inactive'}
               </span>
             </div>
-            : <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">No account yet. Create the user in Supabase, then set the role to department_head and the agency to {agency.value}.</p>}
+            : creating === agency.value
+              ? <form onSubmit={submit} className="mt-3 space-y-2">
+                <input className={inputClass} placeholder="Account name (e.g. BFP Mabini)" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required />
+                <input className={inputClass} type="email" placeholder="Email address" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+                <input className={inputClass} type="tel" placeholder="Phone (optional)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+                <input className={inputClass} type="password" placeholder="Temporary password (min. 8 characters)" minLength={8} autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+                {formError && <p role="alert" className="text-[11px] text-red-600 dark:text-red-300">{formError}</p>}
+                <div className="flex gap-2 pt-1">
+                  <button type="submit" disabled={saving} className="rounded-lg bg-blue px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-60">{saving ? 'Creating...' : 'Create account'}</button>
+                  <button type="button" onClick={closeForm} disabled={saving} className="rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-bold text-slate-500 dark:border-slate-700">Cancel</button>
+                </div>
+              </form>
+              : <div className="mt-2">
+                <p className="text-xs text-amber-700 dark:text-amber-300">No account yet.</p>
+                <button type="button" onClick={() => openForm(agency.value)} className="mt-2 inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-bold text-blue hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                  <Plus size={12} />Create account
+                </button>
+              </div>}
         </div>;
       })}
     </div>}

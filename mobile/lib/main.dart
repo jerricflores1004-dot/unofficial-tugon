@@ -1106,34 +1106,6 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(locationNote!,
                             style: const TextStyle(fontSize: 11, color: TugonColors.muted))),
-                  const SizedBox(height: 12),
-                  Row(children: [
-                    Expanded(
-                        child: OutlinedButton.icon(
-                            onPressed: saving || photos.length >= photoLimit
-                                ? null
-                                : () => capturePhoto(photoLimit),
-                            icon: const Icon(Icons.photo_camera_outlined),
-                            label: const Text('Take photo'))),
-                    const SizedBox(width: 10),
-                    Expanded(
-                        child: OutlinedButton.icon(
-                            onPressed: saving || photos.length >= photoLimit
-                                ? null
-                                : () => pickPhotos(photoLimit),
-                            icon: const Icon(Icons.photo_library_outlined),
-                            label: const Text('Upload'))),
-                  ]),
-                  Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text('${photos.length} of $photoLimit photos',
-                          style: const TextStyle(
-                              fontSize: 11, color: TugonColors.muted))),
-                  if (locationNote != null)
-                    Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(locationNote!,
-                            style: const TextStyle(fontSize: 11, color: TugonColors.muted))),
                   const SizedBox(height: 25),
                   const SectionLabel(
                       icon: Icons.priority_high_rounded, text: 'Severity'),
@@ -1155,12 +1127,31 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                   const SizedBox(height: 25),
                   const SectionLabel(
                       icon: Icons.photo_camera_outlined, text: 'Photo evidence'),
-                  OutlinedButton.icon(
-                      onPressed: saving ? null : () => pickPhotos(photoLimit),
-                      icon: const Icon(Icons.add_a_photo_outlined),
-                      label: Text(photos.isEmpty
-                          ? 'Add up to $photoLimit photos'
-                          : '${photos.length} of $photoLimit selected')),
+                  Row(children: [
+                    Expanded(
+                        flex: 2,
+                        child: OutlinedButton.icon(
+                            onPressed: saving || photos.length >= photoLimit
+                                ? null
+                                : () => capturePhoto(photoLimit),
+                            icon: const Icon(Icons.photo_camera_outlined),
+                            label: const Text('Take photo',
+                                overflow: TextOverflow.ellipsis, maxLines: 1))),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        flex: 3,
+                        child: OutlinedButton.icon(
+                            onPressed: saving || photos.length >= photoLimit
+                                ? null
+                                : () => pickPhotos(photoLimit),
+                            icon: const Icon(Icons.add_a_photo_outlined),
+                            label: Text(
+                                photos.isEmpty
+                                    ? 'Add up to $photoLimit photos'
+                                    : '${photos.length} of $photoLimit selected',
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1))),
+                  ]),
                   if (photos.isNotEmpty)
                     Padding(
                         padding: const EdgeInsets.only(top: 10),
