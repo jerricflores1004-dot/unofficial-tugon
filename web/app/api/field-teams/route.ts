@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { badRequest, requireRole } from '@/lib/server-auth';
 import { createAdminClient } from '@/lib/supabase-admin';
-import { TEAM_KEYS, TEAM_NAMES, generatePassword, loadFieldTeams, logAction } from '@/lib/field-teams-server';
+import { generatePassword, loadFieldTeams, logAction } from '@/lib/field-teams-server';
 
 export async function GET() {
   const auth = await requireRole(['admin']);
@@ -20,11 +20,17 @@ export async function GET() {
 }
 
 const createSchema = z.object({
-  team: z.enum(TEAM_KEYS),
+  name: z.string().trim().min(2).max(60),
   email: z.string().trim().email().max(160),
   contactNumber: z.string().trim().min(7).max(40).optional(),
   members: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
 });
+
+// "Team Alpha" or "alpha" fills the team enum. Any other name leaves it empty.
+function enumTeam(name: string): 'alpha' | 'bravo' | 'charlie' | null {
+  const match = name.toLowerCase().trim().match(/^(?:team\s+)?(alpha|bravo|charlie)$/);
+  return (match?.[1] as 'alpha' | 'bravo' | 'charlie') ?? null;
+}
 
 export async function POST(request: Request) {
   const auth = await requireRole(['admin']);
@@ -34,17 +40,14 @@ export async function POST(request: Request) {
   if (!admin) return badRequest('The database connection is not configured.', 503);
 
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return badRequest('Choose a team and enter a valid login email.');
-  const { team, email, contactNumber, members } = parsed.data;
-  const name = TEAM_NAMES[team];
+  if (!parsed.success) return badRequest('Enter a team name and a valid login email.');
+  const { name, email, contactNumber, members } = parsed.data;
+  const team = enumTeam(name);
 
-  // One account per team.
-  const [{ data: existingUser }, { data: existingTeam }] = await Promise.all([
-    admin.from('users').select('id').eq('agency', 'mdrrmo').eq('team', team).limit(1),
-    admin.from('field_teams').select('id').eq('name', name).limit(1),
-  ]);
-  if ((existingUser?.length ?? 0) > 0 || (existingTeam?.length ?? 0) > 0) {
-    return badRequest(`${name} already has an account.`, 409);
+  // Team names must be unique (ignoring upper/lower case).
+  const { data: existing } = await admin.from('field_teams').select('name');
+  if ((existing ?? []).some((row: { name: string }) => row.name.trim().toLowerCase() === name.toLowerCase())) {
+    return badRequest(`A team named "${name}" already exists.`, 409);
   }
 
   // 1. Login account
@@ -108,7 +111,7 @@ export async function POST(request: Request) {
     return badRequest('Unable to create the field team.', 500);
   }
 
-  await logAction(admin, auth.user.id, 'field_team.created', row.id, { team, email });
+  await logAction(admin, auth.user.id, 'field_team.created', row.id, { name, email });
 
   const [dto] = await loadFieldTeams(admin, row.id);
   return NextResponse.json({ data: { team: dto, tempPassword: password } }, { status: 201 });
