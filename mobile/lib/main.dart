@@ -939,6 +939,18 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
     }
   }
 
+  static const double mabiniLatMin = 13.68;
+  static const double mabiniLatMax = 13.82;
+  static const double mabiniLngMin = 120.87;
+  static const double mabiniLngMax = 120.99;
+
+  bool _isWithinMabini(double lat, double lng) {
+    return lat >= mabiniLatMin
+        && lat <= mabiniLatMax
+        && lng >= mabiniLngMin
+        && lng <= mabiniLngMax;
+  }
+
   Future<void> submit(List<IncidentTypeOption> options) async {
     if (!(formKey.currentState?.validate() ?? false)) return;
     final label = options.isEmpty ? customType.text.trim() : (selectedType ?? '').trim();
@@ -946,6 +958,13 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
       setState(() => failure = 'Choose or type the incident type.');
       return;
     }
+
+    // Reject GPS coordinates outside Mabini, Batangas.
+    if (latitude != null && longitude != null && !_isWithinMabini(latitude!, longitude!)) {
+      setState(() => failure = 'Reports are only accepted within Mabini, Batangas. Use manual location instead.');
+      return;
+    }
+
     setState(() {
       saving = true;
       failure = null;
