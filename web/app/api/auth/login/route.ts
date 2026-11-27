@@ -25,10 +25,11 @@ export async function POST(request: Request) {
   if (!profile?.is_active || !isWebRole(profile.role)) {
     await supabase.auth.signOut();
     return NextResponse.json(
-      { error: 'This portal is for MDRRMO staff. Residents, please use the TUGON mobile app.' },
+      { error: 'This portal is for MDRRMO staff and agency accounts. Residents, please use the TUGON mobile app.' },
       { status: 403 }
     );
   }
 
-  return NextResponse.json({ user: data.user, session: data.session });
+  // The role comes from the profile, so nobody picks a role or agency at sign-in.
+  return NextResponse.json({ user: data.user, session: data.session, profile: { role: profile.role } });
 }

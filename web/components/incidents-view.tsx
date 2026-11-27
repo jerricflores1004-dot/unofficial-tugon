@@ -175,7 +175,7 @@ function IncidentTableRow({ incident, checked, onCheck }: { incident: Incident; 
       <div><p className="text-xs font-bold text-slate-800 dark:text-slate-100">{incident.type}</p><p className="max-w-[190px] truncate text-[11px] text-slate-500">{incident.location}</p></div>
     </div></td>
     <td className="px-3 py-3 text-xs text-slate-600 dark:text-slate-300">{incident.barangay}</td>
-    <td className="px-3 py-3"><PriorityBadge priority={incident.priority as Priority} /></td>
+    <td className="px-3 py-3"><PriorityBadge priority={incident.priority as Priority} /><p className="mt-1 text-[10px] text-slate-400">{incident.ai_triaged_at ? `AI → ${incident.ai_agencies.length > 0 ? incident.ai_agencies.map((agency) => agency === 'coast_guard' ? 'PCG' : agency.toUpperCase()).join(', ') : 'MDRRMO'}` : 'AI triage pending'}</p></td>
     <td className="px-3 py-3"><StatusBadge status={incident.status as IncidentStatus} /></td>
     <td className="px-3 py-3 text-xs text-slate-600 dark:text-slate-300">{incident.assigned_to || <span className="italic text-slate-400">Unassigned</span>}</td>
     <td className="px-3 py-3 text-xs text-slate-500">{new Date(incident.reported_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</td>

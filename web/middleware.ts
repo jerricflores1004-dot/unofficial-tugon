@@ -7,8 +7,13 @@ const PUBLIC_PREFIXES = ['/login', '/api/auth', '/api/push'];
 
 const PUBLIC_PAGES = ['/', '/about', '/contact'];
 
+// The resident app calls this with a Bearer token, not a cookie; the route
+// verifies the token itself.
+const BEARER_API = /^\/api\/incidents\/[^/]+\/triage$/;
+
 function isPublicPath(pathname: string) {
   return (
+    BEARER_API.test(pathname) ||
     PUBLIC_PAGES.includes(pathname) ||
     PUBLIC_PREFIXES.some(
       (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
