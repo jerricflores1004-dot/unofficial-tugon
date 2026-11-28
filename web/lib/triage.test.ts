@@ -1,5 +1,29 @@
-import { describe, expect, it } from 'vitest';
-import { classifyByRules } from './triage';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { classifyByRules, classifyIncident } from './triage';
+
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+
+function geminiReply(text: string, status = 200) {
+  return vi.fn().mockResolvedValue(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }), { status }));
+}
+
+describe('classifyIncident (Gemini)', () => {
+  const report = { location_text: 'Port', barangay: 'Anilao', affected_people: 3, vulnerable_groups: [], incident_type: 'Sea', description: 'Lumubog ang bangka, may tatlong tao sa tubig' };
+
+  it('uses the Gemini answer', async () => {
+    vi.stubEnv('GEMINI_API_KEY', 'test-key');
+    vi.stubGlobal('fetch', geminiReply(JSON.stringify({ severity: 'critical', agencies: ['coast_guard', 'coast_guard'], reason: 'People in the water.' })));
+    await expect(classifyIncident(report)).resolves.toEqual({ severity: 'critical', agencies: ['coast_guard'], reason: 'People in the water.', source: 'ai' });
+  });
+
+  it('falls back to rules on a bad answer or HTTP error', async () => {
+    vi.stubEnv('GEMINI_API_KEY', 'test-key');
+    vi.stubGlobal('fetch', geminiReply(JSON.stringify({ severity: 'extreme', agencies: [], reason: '' })));
+    expect((await classifyIncident(report)).source).toBe('rules');
+    vi.stubGlobal('fetch', geminiReply('{}', 429));
+    expect((await classifyIncident(report)).source).toBe('rules');
+  });
+});
 
 const base = { location_text: 'Poblacion', barangay: 'Poblacion', affected_people: 0, vulnerable_groups: [] };
 

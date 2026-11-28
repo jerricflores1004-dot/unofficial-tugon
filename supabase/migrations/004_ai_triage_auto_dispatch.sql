@@ -2,7 +2,7 @@
 -- Apply with: supabase db push
 --
 -- Residents no longer pick a severity. After a report is stored, the web API
--- asks Claude to classify it (low / medium / high / critical) and to choose
+-- asks Gemini to classify it (low / medium / high / critical) and to choose
 -- the responding agencies (BFP, PNP, Philippine Coast Guard). The result is
 -- written back to the incident, and one ticket_dispatches row is created per
 -- agency. Admins keep seeing every report and its dispatch status.
@@ -19,7 +19,7 @@ create index if not exists incidents_ai_triaged_idx on public.incidents(ai_triag
 
 comment on column public.incidents.ai_severity is 'Severity chosen by AI triage. Copied into severity, so the priority trigger runs.';
 comment on column public.incidents.ai_agencies is 'Agencies the triage auto-dispatched: bfp, pnp, coast_guard.';
-comment on column public.incidents.ai_source is 'ai = Claude classified it; rules = keyword fallback (AI unavailable).';
+comment on column public.incidents.ai_source is 'ai = Gemini classified it; rules = keyword fallback (AI unavailable).';
 comment on column public.incidents.ai_triaged_at is 'Null until triage ran. Admins can see untriaged reports.';
 
 -- 2. Automatic dispatches have no human sender -------------------------------
