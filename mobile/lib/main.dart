@@ -184,7 +184,7 @@ class TugonApp extends ConsumerWidget {
       title: 'TUGON',
       theme: tugonTheme(Brightness.light),
       darkTheme: tugonTheme(Brightness.dark),
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.light,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
     );
@@ -459,7 +459,10 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
       // 911 must work before sign-in: no account needed in an emergency.
-      bottomNavigationBar: const SafeArea(child: Emergency911Button()),
+      bottomNavigationBar: const SafeArea(
+          child: Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: Center(heightFactor: 1, child: Emergency911Button()))),
       body: SafeArea(
           child: Center(
               child: SingleChildScrollView(
@@ -529,17 +532,15 @@ class _LoginScreenState extends State<LoginScreen> {
                             const SizedBox(height: 22),
                             SizedBox(
                                 width: double.infinity,
-                                height: 54,
                                 child: FilledButton(
                                     onPressed: loading ? null : submitAuth,
-                                    style: FilledButton.styleFrom(
-                                        backgroundColor: TugonColors.blue,
-                                        shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12))),
                                     child: loading
-                                        ? const CircularProgressIndicator(color: Colors.white)
-                                        : Text(isSignUp ? 'Sign up' : 'Sign in',
-                                            style: const TextStyle(fontWeight: FontWeight.w700)))),
+                                        ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                                color: Colors.white, strokeWidth: 2))
+                                        : Text(isSignUp ? 'Sign up' : 'Sign in'))),
                             const SizedBox(height: 18),
                             Center(
                                 child: TextButton(
@@ -587,35 +588,35 @@ class HomeScreen extends ConsumerWidget {
                       style: TextStyle(color: TugonColors.muted)),
                   const SizedBox(height: 20),
                   Container(
-                      padding: const EdgeInsets.all(18),
+                      padding: const EdgeInsets.fromLTRB(18, 16, 14, 16),
                       decoration: BoxDecoration(
-                          color: TugonColors.emergency,
-                          borderRadius: BorderRadius.circular(18),
-                          boxShadow: const [
-                            BoxShadow(
-                                color: Color(0x33DC2626),
-                                blurRadius: 18,
-                                offset: Offset(0, 8))
-                          ]),
+                          gradient: const LinearGradient(
+                              colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight),
+                          borderRadius: BorderRadius.circular(16)),
                       child: Row(children: [
                         const Expanded(
                             child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                              Text('Need urgent help?',
+                              Text('See something urgent?',
                                   style: TextStyle(
                                       color: Colors.white,
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w800)),
-                              SizedBox(height: 5),
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700)),
+                              SizedBox(height: 4),
                               Text('Report an incident to MDRRMO Mabini.',
                                   style: TextStyle(
-                                      color: Color(0xFFFFE4E6), fontSize: 12))
+                                      color: Color(0xFFDBEAFE), fontSize: 12))
                             ])),
-                        IconButton(
+                        FilledButton(
                             onPressed: () => context.push('/report'),
-                            icon: const Icon(Icons.arrow_forward_rounded,
-                                color: Colors.white, size: 28))
+                            style: FilledButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: TugonColors.blue,
+                                minimumSize: const Size(0, 38)),
+                            child: const Text('Report'))
                       ])),
                   const SizedBox(height: 26),
                   Row(
@@ -933,6 +934,19 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
         latitude = position.latitude;
         longitude = position.longitude;
       });
+      // Fill the barangay from the GPS point; the resident can still edit it.
+      final found = await ref
+          .read(apiProvider)
+          .barangayAt(position.latitude, position.longitude);
+      if (!mounted) return;
+      setState(() {
+        if (found != null) {
+          barangay.text = found;
+          locationNote = 'Barangay detected: $found. Edit it if it is wrong.';
+        } else if (barangay.text.trim().isEmpty) {
+          locationNote = 'Could not detect the barangay. Please type it.';
+        }
+      });
     } catch (_) {
       if (mounted) {
         setState(() => locationNote = 'Could not get your location. You can still type it.');
@@ -1174,7 +1188,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                                 color: TugonColors.emergency, fontSize: 12))),
                   const SizedBox(height: 30),
                   SizedBox(
-                      height: 54,
+                      width: double.infinity,
                       child: FilledButton.icon(
                           onPressed: saving ? null : () => submit(options),
                           icon: saving
@@ -1467,60 +1481,78 @@ class ResidentScaffold extends StatelessWidget {
   final Widget child;
   final int index;
 
+  static const _routes = ['/', '/reports', '/notifications', '/profile'];
+
+  Widget _tab(BuildContext context, int tab, IconData icon, IconData activeIcon, String label) {
+    final active = tab == index;
+    final color = active ? TugonColors.blue : TugonColors.muted;
+    return Expanded(
+        child: InkWell(
+            onTap: () => context.go(_routes[tab]),
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(active ? activeIcon : icon, color: color, size: 22),
+              const SizedBox(height: 3),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: color,
+                      fontWeight: active ? FontWeight.w700 : FontWeight.w500)),
+            ])));
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
-      body: child,
-      bottomNavigationBar: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Emergency911Button(),
-        NavigationBar(
-          selectedIndex: index,
-          onDestinationSelected: (value) =>
-              context.go(['/', '/reports', '/notifications', '/profile'][value]),
-          destinations: const [
-            NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
-                label: 'Home'),
-            NavigationDestination(
-                icon: Icon(Icons.receipt_long_outlined),
-                selectedIcon: Icon(Icons.receipt_long),
-                label: 'Reports'),
-            NavigationDestination(
-                icon: Icon(Icons.notifications_none),
-                selectedIcon: Icon(Icons.notifications),
-                label: 'Alerts'),
-            NavigationDestination(
-                icon: Icon(Icons.person_outline),
-                selectedIcon: Icon(Icons.person),
-                label: 'Profile')
-          ])
-      ]));
+      body: SafeArea(bottom: false, child: child),
+      bottomNavigationBar: Container(
+          decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: TugonColors.border))),
+          child: SafeArea(
+              top: false,
+              child: SizedBox(
+                  height: 64,
+                  child: Row(children: [
+                    _tab(context, 0, Icons.home_outlined, Icons.home_rounded, 'Home'),
+                    _tab(context, 1, Icons.receipt_long_outlined, Icons.receipt_long, 'Reports'),
+                    const Expanded(child: Center(child: Emergency911Button())),
+                    _tab(context, 2, Icons.notifications_none, Icons.notifications, 'Alerts'),
+                    _tab(context, 3, Icons.person_outline, Icons.person, 'Profile'),
+                  ])))));
 }
 
-/// Opens the phone dialer on 911. A phone call uses the cellular network,
-/// so this works without mobile data or Wi-Fi.
+/// Round red 911 icon. It opens the phone dialer on 911; a phone call uses the
+/// cellular network, so this works without mobile data or Wi-Fi.
 class Emergency911Button extends StatelessWidget {
   const Emergency911Button({super.key});
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-      top: false,
-      bottom: false,
-      child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: FilledButton.icon(
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
-                  onPressed: () async {
-                    final opened = await launchUrl(Uri(scheme: 'tel', path: '911'));
-                    if (!opened && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text('Could not open the dialer. Dial 911 directly.')));
-                    }
-                  },
-                  icon: const Icon(Icons.call),
-                  label: const Text('Call 911',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800))))));
+  Widget build(BuildContext context) => Semantics(
+      button: true,
+      label: 'Call 911',
+      child: Material(
+          color: TugonColors.emergency,
+          shape: const CircleBorder(),
+          elevation: 3,
+          shadowColor: const Color(0x66DC2626),
+          child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: () async {
+                final opened = await launchUrl(Uri(scheme: 'tel', path: '911'));
+                if (!opened && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Could not open the dialer. Dial 911 directly.')));
+                }
+              },
+              child: const SizedBox(
+                  width: 52,
+                  height: 52,
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.call, color: Colors.white, size: 20),
+                    Text('911',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            height: 1.1)),
+                  ])))));
 }

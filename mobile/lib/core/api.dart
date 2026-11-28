@@ -136,6 +136,37 @@ class TugonApi {
     return (response as Map)['id'].toString();
   }
 
+  /// The barangay at a GPS point, from OpenStreetMap's reverse geocoder.
+  /// Returns null when offline or unknown; the resident can always type it.
+  /// shortcut: public Nominatim allows ~1 request/second, fine for one tap per report;
+  /// move to a self-hosted geocoder or a barangay boundary table if usage grows.
+  Future<String?> barangayAt(double latitude, double longitude) async {
+    try {
+      final response = await Dio().get(
+          'https://nominatim.openstreetmap.org/reverse',
+          queryParameters: {
+            'format': 'jsonv2',
+            'lat': latitude,
+            'lon': longitude,
+            'zoom': 18,
+            'addressdetails': 1,
+          },
+          options: Options(
+              headers: {'User-Agent': 'TUGON-Mabini/1.0', 'Accept-Language': 'en'},
+              receiveTimeout: const Duration(seconds: 8)));
+      final address = (response.data as Map?)?['address'];
+      if (address is! Map) return null;
+      // In Mabini, OSM tags barangays as "quarter" or "village"; try the most specific first.
+      for (final key in ['quarter', 'village', 'suburb', 'neighbourhood', 'hamlet']) {
+        final value = address[key];
+        if (value is String && value.trim().isNotEmpty) return value.trim();
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Asks the server to run AI severity triage and auto-dispatch. Call it after
   /// the photos are uploaded so the AI can look at them. Callers fire and
   /// forget: a failure never blocks the report, and admins can re-run triage.
