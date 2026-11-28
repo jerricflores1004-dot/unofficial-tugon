@@ -83,6 +83,7 @@ export function mapIncident(row: Row): Incident {
     ai_agencies: Array.isArray(row.ai_agencies) ? row.ai_agencies.map((item: unknown) => String(item)) : [],
     ai_source: row.ai_source === 'ai' || row.ai_source === 'rules' ? row.ai_source : null,
     ai_triaged_at: nullableText(row.ai_triaged_at),
+    ai_metrics: row.ai_metrics && typeof row.ai_metrics === 'object' ? row.ai_metrics : null,
   };
 }
 

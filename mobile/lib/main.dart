@@ -987,7 +987,6 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
       final api = ref.read(apiProvider);
       final result = await api.submitOrQueue(payload, ref.read(queueProvider),
           queueEnabled: queueAllowed);
-      if (!mounted) return;
       var photoWarning = false;
       if (result.submitted && result.incidentId != null && photos.isNotEmpty) {
         try {
@@ -995,6 +994,10 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
         } catch (_) {
           photoWarning = true;
         }
+      }
+      // Triage after the upload, so the AI can also judge the photos.
+      if (result.submitted && result.incidentId != null) {
+        api.requestTriage(result.incidentId!).catchError((_) {});
       }
       if (!mounted) return;
       ref.invalidate(incidentsProvider);
