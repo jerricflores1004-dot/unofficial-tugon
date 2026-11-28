@@ -46,7 +46,8 @@ export async function POST(request: Request) {
     tokens,
     notification: { title: record.title ?? 'TUGON', body: record.body ?? '' },
     data: { notification_id: record.id, notification_type: record.notification_type ?? '' },
-    android: { priority: 'high' },
+    // tugon_alerts is the high-importance channel the app creates, so alerts pop up on screen.
+    android: { priority: 'high', notification: { channelId: 'tugon_alerts' } },
   });
 
   // Remove tokens that no longer belong to an installed app.

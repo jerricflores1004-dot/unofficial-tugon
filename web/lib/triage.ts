@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { CREDIBILITY, METRICS, metricsPrompt, reportedLifeThreatScore, reportedPeopleScore, severityFromMetrics, type Credibility, type Metrics } from './severity-matrix';
 
 export type Agency = 'bfp' | 'pnp' | 'coast_guard';
+const AGENCY_NAMES: Record<Agency, string> = { bfp: 'BFP', pnp: 'PNP', coast_guard: 'Coast Guard' };
 export type TriageSeverity = 'low' | 'medium' | 'high' | 'critical';
 export type TriageMetrics = Metrics & { photo_findings: string; credibility: Credibility; credibility_note: string };
 export type TriageResult = {
@@ -206,7 +207,7 @@ export function classifyByRules(incident: IncidentInput): TriageResult {
 export async function triageAndDispatch(admin: SupabaseClient, incidentId: string) {
   const { data: incident, error } = await admin
     .from('incidents')
-    .select('id, status, incident_type, description, location_text, barangay, affected_people, injured_people, vulnerable_groups, ai_triaged_at, ticket:tickets(id, status)')
+    .select('id, reporter_id, status, incident_type, description, location_text, barangay, affected_people, injured_people, vulnerable_groups, ai_triaged_at, ticket:tickets(id, status)')
     .eq('id', incidentId)
     .maybeSingle();
   if (error || !incident) return { error: 'Incident not found.' as const };
@@ -291,6 +292,22 @@ export async function triageAndDispatch(admin: SupabaseClient, incidentId: strin
     }
 
     if (firstDispatchId) await attachFreeFieldTeam(admin, firstDispatchId, incident, result.severity);
+  }
+
+  // Tell the resident what happened to the report; the push trigger turns this into a phone alert.
+  if (incident.reporter_id && !closed) {
+    const names = dispatched.map((agency) => AGENCY_NAMES[agency]).join(', ');
+    const { error: residentError } = await admin.from('notifications').insert({
+      user_id: incident.reporter_id,
+      title: dispatched.length > 0 ? 'Help is on the way' : 'Report received',
+      body: dispatched.length > 0
+        ? `${names} dispatched to your ${incident.incident_type} report in ${incident.barangay}.`
+        : `MDRRMO Mabini is reviewing your ${incident.incident_type} report in ${incident.barangay}.`,
+      notification_type: dispatched.length > 0 ? 'status_update' : 'report_confirmation',
+      entity_type: 'incident',
+      entity_id: incident.id,
+    });
+    if (residentError) console.error('TRIAGE: resident notification failed', residentError.message);
   }
 
   return { result, dispatched };

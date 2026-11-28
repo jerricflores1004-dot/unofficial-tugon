@@ -16,6 +16,9 @@ import 'package:geolocator/geolocator.dart';
 import 'core/push.dart';
 import 'field/field_home.dart';
 
+/// Lets push messages that arrive while the app is open show a banner on any screen.
+final messengerKey = GlobalKey<ScaffoldMessengerState>();
+
 final supabaseProvider = Provider<SupabaseClient>((ref) => Supabase.instance.client);
 final apiProvider = Provider<TugonApi>((ref) => TugonApi(ref.watch(supabaseProvider)));
 final queueProvider = Provider<OfflineReportQueue>((ref) => OfflineReportQueue());
@@ -186,6 +189,7 @@ class TugonApp extends ConsumerWidget {
       darkTheme: tugonTheme(Brightness.dark),
       themeMode: ThemeMode.light,
       routerConfig: router,
+      scaffoldMessengerKey: messengerKey,
       debugShowCheckedModeBanner: false,
     );
   }
@@ -214,8 +218,13 @@ class RoleGate extends ConsumerWidget {
         data: (p) {
           if (p != null && p.isActive) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              PushService.start(ref.read(supabaseProvider),
-                  onMessage: () => ref.invalidate(notificationsProvider));
+              PushService.start(ref.read(supabaseProvider), onMessage: (title, body) {
+                ref.invalidate(notificationsProvider);
+                ref.invalidate(incidentsProvider);
+                messengerKey.currentState?.showSnackBar(SnackBar(
+                    duration: const Duration(seconds: 6),
+                    content: Text([title, body].whereType<String>().join(': '))));
+              });
             });
           }
           if (p == null || !p.isActive) {
