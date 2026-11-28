@@ -1086,7 +1086,6 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
                           labelText: 'People affected',
-                          helperText: 'Stranded, blocked or displaced, even if not hurt',
                           hintText: '0',
                           prefixIcon: Icon(Icons.groups_outlined))),
                   const SizedBox(height: 14),
@@ -1094,8 +1093,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                       controller: injuredPeople,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
-                          labelText: 'Injured or in danger',
-                          helperText: 'Hurt, trapped, unconscious or drowning',
+                          labelText: 'Injured',
                           hintText: '0',
                           prefixIcon: Icon(Icons.personal_injury_outlined))),
                   const SizedBox(height: 25),
