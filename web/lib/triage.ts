@@ -1,16 +1,18 @@
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { METRICS, metricsPrompt, severityFromMetrics, type Metrics } from './severity-matrix';
+import { CREDIBILITY, METRICS, metricsPrompt, severityFromMetrics, type Credibility, type Metrics } from './severity-matrix';
 
 export type Agency = 'bfp' | 'pnp' | 'coast_guard';
 export type TriageSeverity = 'low' | 'medium' | 'high' | 'critical';
-export type TriageMetrics = Metrics & { photo_findings: string };
+export type TriageMetrics = Metrics & { photo_findings: string; credibility: Credibility; credibility_note: string };
 export type TriageResult = {
   severity: TriageSeverity;
   agencies: Agency[];
   reason: string;
   source: 'ai' | 'rules';
   metrics: TriageMetrics | null;
+  /** True when the report looks false: it waits for an admin instead of being dispatched. */
+  held: boolean;
 };
 /** A photo sent to the AI: base64 bytes and their MIME type. */
 export type TriagePhoto = { mimeType: string; data: string };
@@ -33,6 +35,8 @@ const TriageSchema = z.object({
   resource_need: score,
   agencies: z.array(z.enum(['bfp', 'pnp', 'coast_guard'])),
   photo_findings: z.string(),
+  credibility: z.enum(['consistent', 'doubtful', 'implausible']),
+  credibility_note: z.string(),
   reason: z.string(),
 });
 
@@ -43,9 +47,22 @@ Score each metric from 0 to 3 using exactly these definitions. Do not pick a sev
 the MDRRMO computes it from your scores with a fixed rule.
 ${metricsPrompt()}
 
-Use the photos as evidence. When a photo shows more or less danger than the text says
-(for example visible flames, deep water, injured people, or nothing related), score what the
-photo shows and say so in photo_findings. When there are no photos, write "No photo".
+Score only what the report and photos actually show. Do not assume danger that is not there:
+- life_threat and people_affected are 0 when no person is mentioned in the text or visible in a photo,
+  even for a fire or flood. "People affected" in the report is the resident's own count.
+- When a photo shows more or less danger than the text says (visible flames, deep water, injured
+  people, or nothing related), score what the photo shows and say so in photo_findings.
+  When there are no photos, write "No photo".
+
+Check credibility: does the report make sense as a real event in Mabini?
+- consistent: text, photos and location agree, and the event is physically possible.
+- doubtful: some details do not fit (vague text, unclear or partly unrelated photo), but it could be real.
+- implausible: impossible as described (for example a fire burning on plain water with no boat, fuel or
+  oil involved), a photo that clearly contradicts the text, a photo that is a meme, cartoon, screenshot,
+  drawing or obvious stock image, or text that reads as a prank or joke.
+Never mark a report implausible only because of short text, typos, Taglish, or a missing photo.
+When a life might really be at risk and you are unsure, choose doubtful, not implausible.
+Explain the credibility in credibility_note in one short English sentence.
 
 Choose every agency that must respond, or none if MDRRMO staff can handle it alone:
 - bfp: Bureau of Fire Protection: fire, smoke, gas leak, explosion, rescue from collapsed structures.
@@ -63,9 +80,11 @@ const RESPONSE_SCHEMA = {
     ...Object.fromEntries(METRICS.map((metric) => [metric.key, SCORE_SCHEMA])),
     agencies: { type: 'ARRAY', items: { type: 'STRING', enum: ['bfp', 'pnp', 'coast_guard'] } },
     photo_findings: { type: 'STRING' },
+    credibility: { type: 'STRING', enum: CREDIBILITY.map((level) => level.value) },
+    credibility_note: { type: 'STRING' },
     reason: { type: 'STRING' },
   },
-  required: [...METRICS.map((metric) => metric.key), 'agencies', 'photo_findings', 'reason'],
+  required: [...METRICS.map((metric) => metric.key), 'agencies', 'photo_findings', 'credibility', 'credibility_note', 'reason'],
 };
 
 // "-latest" aliases follow Google's current models, so retirements don't break triage.
@@ -112,13 +131,14 @@ export async function classifyIncident(incident: IncidentInput, photos: TriagePh
   ].join('\n');
   for (const model of GEMINI_MODELS) {
     try {
-      const { agencies, reason, photo_findings, ...scores } = await askGemini(model, apiKey, report, photos);
+      const { agencies, reason, photo_findings, credibility, credibility_note, ...scores } = await askGemini(model, apiKey, report, photos);
       return {
         severity: severityFromMetrics(scores),
         agencies: agencies.filter((agency, index) => agencies.indexOf(agency) === index),
         reason: reason.slice(0, 500),
         source: 'ai',
-        metrics: { ...scores, photo_findings: photo_findings.slice(0, 300) },
+        metrics: { ...scores, photo_findings: photo_findings.slice(0, 300), credibility, credibility_note: credibility_note.slice(0, 300) },
+        held: credibility === 'implausible',
       };
     } catch (error) {
       console.error(`TRIAGE: ${model} failed`, error instanceof Error ? error.message : error);
@@ -168,7 +188,7 @@ export function classifyByRules(incident: IncidentInput): TriageResult {
   const agencies = (Object.keys(AGENCY_WORDS) as Agency[]).filter((agency) => AGENCY_WORDS[agency].test(text));
   const vulnerable = (incident.vulnerable_groups ?? []).length > 0 || (incident.affected_people ?? 0) >= 10;
   const severity: TriageSeverity = CRITICAL_WORDS.test(text) ? 'critical' : agencies.length > 0 ? (vulnerable ? 'high' : 'medium') : 'low';
-  return { severity, agencies, reason: 'AI unavailable: classified by keyword rules. Please review.', source: 'rules', metrics: null };
+  return { severity, agencies, reason: 'AI unavailable: classified by keyword rules. Please review.', source: 'rules', metrics: null, held: false };
 }
 
 /**
@@ -208,7 +228,7 @@ export async function triageAndDispatch(admin: SupabaseClient, incidentId: strin
   const ticket = Array.isArray(incident.ticket) ? incident.ticket[0] : incident.ticket;
   const closed = ['rejected', 'closed', 'resolved'].includes(incident.status);
   const dispatched: Agency[] = [];
-  if (ticket && !closed) {
+  if (ticket && !closed && !result.held) {
     for (const agency of result.agencies) {
       const { error: dispatchError } = await admin.from('ticket_dispatches').insert({
         ticket_id: ticket.id,

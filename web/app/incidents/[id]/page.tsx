@@ -12,7 +12,7 @@ import { describeError, sendResource } from '@/lib/api-client';
 import { useApi, useApiGroup } from '@/lib/use-api';
 import { dayLabel, mapIncident, mapIncidentPhoto, mapIncidentUpdate, mapResponder, roleLabel } from '@/lib/mappers';
 import { relativeTime } from '@/lib/format';
-import { METRICS, SEVERITY_RULE } from '@/lib/severity-matrix';
+import { CREDIBILITY, METRICS, SEVERITY_RULE } from '@/lib/severity-matrix';
 import type { Incident, IncidentPhoto, IncidentUpdate, IncidentStatus, Responder, WorkspaceSummary } from '@/lib/types';
 import { ResponsePanel } from '@/components/response-panel';
 
@@ -138,7 +138,9 @@ export default function IncidentDetailPage({ params }: { params: { id: string } 
             <p className="font-bold uppercase tracking-wider text-blue">{incident.ai_source === 'rules' ? 'Triage (keyword rules, AI unavailable)' : 'AI triage'}</p>
             {incident.ai_triaged_at
               ? <>
-                <p className="mt-1"><strong>{incident.severity.toUpperCase()}</strong> · Auto-dispatched to {incident.ai_agencies.length > 0 ? incident.ai_agencies.map((agency) => AGENCY_LABELS[agency] ?? agency).join(', ') : 'no agency (MDRRMO handles it)'}</p>
+                {incident.ai_metrics?.credibility === 'implausible'
+                  ? <p className="mt-1 rounded-lg bg-red-50 px-2 py-1 font-semibold text-red-700 dark:bg-red-950/30 dark:text-red-300">Held for review: this looks like a false report, so it was not dispatched. {incident.ai_agencies.length > 0 && `Suggested agency: ${incident.ai_agencies.map((agency) => AGENCY_LABELS[agency] ?? agency).join(', ')}. `}Dispatch it yourself if it is real, or reject it.</p>
+                  : <p className="mt-1"><strong>{incident.severity.toUpperCase()}</strong> · Auto-dispatched to {incident.ai_agencies.length > 0 ? incident.ai_agencies.map((agency) => AGENCY_LABELS[agency] ?? agency).join(', ') : 'no agency (MDRRMO handles it)'}</p>}
                 {incident.ai_reason && <p className="mt-1">{incident.ai_reason}</p>}
                 {incident.ai_metrics && <SeverityMetrics metrics={incident.ai_metrics} />}
                 <p className="mt-1 text-[11px] text-slate-400">{relativeTime(incident.ai_triaged_at)}</p>
@@ -293,6 +295,7 @@ function SeverityMetrics({ metrics }: { metrics: Record<string, number | string>
       </tbody>
     </table>
     {typeof metrics.photo_findings === 'string' && <p className="mt-2"><strong>Photos:</strong> {metrics.photo_findings}</p>}
+    {typeof metrics.credibility === 'string' && <p className="mt-1"><strong>Credibility:</strong> {CREDIBILITY.find((level) => level.value === metrics.credibility)?.label ?? metrics.credibility}{typeof metrics.credibility_note === 'string' && metrics.credibility_note ? `: ${metrics.credibility_note}` : ''}</p>}
     <p className="mt-2 text-[10px] text-slate-400">Severity rule: {SEVERITY_RULE.map((rule) => `${rule.severity.toUpperCase()} if ${rule.when.toLowerCase()}`).join('; ')}.</p>
   </div>;
 }

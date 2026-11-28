@@ -22,6 +22,20 @@ The definitions live in code at `web/lib/severity-matrix.ts`; the AI prompt and 
 | **Area scope** | One spot or household | Several households or one street | Whole barangay | Two or more barangays | NDRRMC Memo Circular No. 44, s. 2016 (IMT levels) |
 | **Resources needed** | Information only | One unit | Several units, or one agency plus MDRRMO | Several agencies at once | ESI resource count; ICS incident complexity typing |
 
+The AI scores only what the report and photos actually show. Life threat and people affected are 0 when no person is mentioned or visible, even for a fire or a flood.
+
+## Credibility check (false reports)
+
+The AI also checks whether the report makes sense as a real event:
+
+| Credibility | Meaning | What TUGON does |
+|---|---|---|
+| **Consistent** | Text, photos and location agree, and the event is physically possible | Dispatched automatically |
+| **Doubtful** | Some details do not fit (vague text, unclear or partly unrelated photo), but it could be real | Dispatched automatically, flagged so staff verify it |
+| **Likely false** | Impossible as described (for example a fire on plain water with no boat, fuel or oil), the photo clearly contradicts the text, the photo is a meme, cartoon, screenshot or stock image, or it reads as a prank | **Held for admin review, not dispatched.** The admin can still dispatch it or reject it. |
+
+Safety rules for the AI: a report is never marked false only because of short text, typos, Taglish or a missing photo, and when a life might really be at risk the AI must choose "Doubtful", not "Likely false". A held report is never lost: it stays in the admin's incident list, marked "held, possible false report".
+
 ## Severity rule
 
 | Severity | When |
