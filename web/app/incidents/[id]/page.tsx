@@ -129,7 +129,7 @@ export default function IncidentDetailPage({ params }: { params: { id: string } 
 
         <div className="mt-5 grid gap-4 border-t border-slate-200/70 pt-5 sm:grid-cols-4 dark:border-slate-700">
           <Detail label="Reported" value={`${dayLabel(incident.reported_at)} · ${new Date(incident.reported_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}`} />
-          <Detail label="Affected people" value={`${incident.affected_people} reported`} />
+          <Detail label="Affected people" value={`${incident.affected_people} affected · ${incident.injured_people} injured or in danger`} />
           <Detail label="Priority reason" value={incident.severity === 'critical' ? 'Critical severity' : incident.severity === 'high' && incident.vulnerable_groups.length > 0 ? 'High severity with a vulnerable group' : `Severity set to ${incident.severity}`} />
         </div>
 

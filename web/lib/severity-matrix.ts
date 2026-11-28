@@ -100,6 +100,23 @@ export const SEVERITY_RULE = [
   { severity: 'low', when: 'Anything else' },
 ] as const;
 
+/**
+ * The lowest "people affected" score the resident's own numbers allow. The AI may score
+ * higher (for example from a photo) but never below what the resident reported.
+ */
+export function reportedPeopleScore(count: number | null, vulnerableGroups: string[] | null): number {
+  const people = count ?? 0;
+  if (people >= 10) return 3;
+  if (people >= 3 || (vulnerableGroups ?? []).length > 0) return 2;
+  if (people >= 1) return 1;
+  return 0;
+}
+
+/** The lowest "life threat" score the resident's injured count allows: anyone hurt means at least 2. */
+export function reportedLifeThreatScore(injured: number | null): number {
+  return (injured ?? 0) > 0 ? 2 : 0;
+}
+
 export function severityFromMetrics(metrics: Metrics): Severity {
   const total = METRICS.reduce((sum, metric) => sum + metrics[metric.key], 0);
   if (metrics.life_threat === 3 || total >= 11) return 'critical';

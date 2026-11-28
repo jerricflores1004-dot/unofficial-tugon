@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { classifyByRules, classifyIncident } from './triage';
-import { severityFromMetrics } from './severity-matrix';
+import { reportedLifeThreatScore, reportedPeopleScore, severityFromMetrics } from './severity-matrix';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -22,6 +22,22 @@ describe('classifyIncident (Gemini)', () => {
     expect(result).toEqual({ severity: 'critical', agencies: ['coast_guard'], reason: 'People in the water.', source: 'ai', held: false, metrics: { ...SCORES, photo_findings: 'Photo shows a capsized boat.', credibility: 'consistent', credibility_note: 'Photo matches the text.' } });
     const parts = JSON.parse(fetchMock.mock.calls[0][1].body).contents[0].parts;
     expect(parts[0]).toEqual({ inline_data: { mime_type: 'image/jpeg', data: 'AAAA' } });
+  });
+
+  it('never scores people affected below the count the resident reported', async () => {
+    vi.stubEnv('GEMINI_API_KEY', 'test-key');
+    vi.stubGlobal('fetch', geminiReply(answer({ people_affected: 1 })));
+    const result = await classifyIncident({ ...report, affected_people: 6 });
+    expect(result.metrics?.people_affected).toBe(2);
+  });
+
+  it('raises life threat to at least 2 when the resident reports anyone injured', async () => {
+    vi.stubEnv('GEMINI_API_KEY', 'test-key');
+    vi.stubGlobal('fetch', geminiReply(answer({ life_threat: 0, people_affected: 0, spread_risk: 0, area_scope: 0, resource_need: 1 })));
+    const result = await classifyIncident({ ...report, affected_people: 0, injured_people: 1 });
+    expect(result.metrics?.life_threat).toBe(2);
+    expect(result.metrics?.people_affected).toBe(1);
+    expect(result.severity).toBe('high');
   });
 
   it('holds a report the AI finds implausible', async () => {
@@ -48,6 +64,25 @@ describe('classifyIncident (Gemini)', () => {
     expect((await classifyIncident(report)).source).toBe('rules');
     vi.stubGlobal('fetch', geminiReply('{}', 429));
     expect((await classifyIncident(report)).source).toBe('rules');
+  });
+});
+
+describe('reportedPeopleScore', () => {
+  it('maps the reported count to the matrix levels', () => {
+    expect(reportedPeopleScore(0, [])).toBe(0);
+    expect(reportedPeopleScore(2, [])).toBe(1);
+    expect(reportedPeopleScore(6, [])).toBe(2);
+    expect(reportedPeopleScore(1, ['elderly'])).toBe(2);
+    expect(reportedPeopleScore(12, null)).toBe(3);
+    expect(reportedPeopleScore(null, null)).toBe(0);
+  });
+});
+
+describe('reportedLifeThreatScore', () => {
+  it('is 2 when anyone is injured, else 0', () => {
+    expect(reportedLifeThreatScore(0)).toBe(0);
+    expect(reportedLifeThreatScore(null)).toBe(0);
+    expect(reportedLifeThreatScore(3)).toBe(2);
   });
 });
 

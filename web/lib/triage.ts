@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { CREDIBILITY, METRICS, metricsPrompt, severityFromMetrics, type Credibility, type Metrics } from './severity-matrix';
+import { CREDIBILITY, METRICS, metricsPrompt, reportedLifeThreatScore, reportedPeopleScore, severityFromMetrics, type Credibility, type Metrics } from './severity-matrix';
 
 export type Agency = 'bfp' | 'pnp' | 'coast_guard';
 export type TriageSeverity = 'low' | 'medium' | 'high' | 'critical';
@@ -23,6 +23,7 @@ type IncidentInput = {
   location_text: string;
   barangay: string;
   affected_people: number | null;
+  injured_people?: number | null;
   vulnerable_groups: string[] | null;
 };
 
@@ -125,13 +126,18 @@ export async function classifyIncident(incident: IncidentInput, photos: TriagePh
     `Type: ${incident.incident_type}`,
     `Barangay: ${incident.barangay}`,
     `Location: ${incident.location_text}`,
-    `People affected: ${incident.affected_people ?? 0}`,
+    `People affected (stranded, blocked or displaced): ${incident.affected_people ?? 0}`,
+    `People injured or in danger: ${incident.injured_people ?? 0}`,
     `Vulnerable groups: ${(incident.vulnerable_groups ?? []).join(', ') || 'none'}`,
     `Description: ${incident.description}`,
   ].join('\n');
   for (const model of GEMINI_MODELS) {
     try {
       const { agencies, reason, photo_findings, credibility, credibility_note, ...scores } = await askGemini(model, apiKey, report, photos);
+      // The resident's own numbers set the floor; the AI can score higher, never lower.
+      const reportedPeople = Math.max(incident.affected_people ?? 0, incident.injured_people ?? 0);
+      scores.people_affected = Math.max(scores.people_affected, reportedPeopleScore(reportedPeople, incident.vulnerable_groups));
+      scores.life_threat = Math.max(scores.life_threat, reportedLifeThreatScore(incident.injured_people ?? 0));
       return {
         severity: severityFromMetrics(scores),
         agencies: agencies.filter((agency, index) => agencies.indexOf(agency) === index),
@@ -187,7 +193,8 @@ export function classifyByRules(incident: IncidentInput): TriageResult {
   const text = `${incident.incident_type} ${incident.description}`;
   const agencies = (Object.keys(AGENCY_WORDS) as Agency[]).filter((agency) => AGENCY_WORDS[agency].test(text));
   const vulnerable = (incident.vulnerable_groups ?? []).length > 0 || (incident.affected_people ?? 0) >= 10;
-  const severity: TriageSeverity = CRITICAL_WORDS.test(text) ? 'critical' : agencies.length > 0 ? (vulnerable ? 'high' : 'medium') : 'low';
+  const injured = (incident.injured_people ?? 0) > 0;
+  const severity: TriageSeverity = CRITICAL_WORDS.test(text) ? 'critical' : injured || (agencies.length > 0 && vulnerable) ? 'high' : agencies.length > 0 ? 'medium' : 'low';
   return { severity, agencies, reason: 'AI unavailable: classified by keyword rules. Please review.', source: 'rules', metrics: null, held: false };
 }
 
@@ -199,7 +206,7 @@ export function classifyByRules(incident: IncidentInput): TriageResult {
 export async function triageAndDispatch(admin: SupabaseClient, incidentId: string) {
   const { data: incident, error } = await admin
     .from('incidents')
-    .select('id, status, incident_type, description, location_text, barangay, affected_people, vulnerable_groups, ai_triaged_at, ticket:tickets(id, status)')
+    .select('id, status, incident_type, description, location_text, barangay, affected_people, injured_people, vulnerable_groups, ai_triaged_at, ticket:tickets(id, status)')
     .eq('id', incidentId)
     .maybeSingle();
   if (error || !incident) return { error: 'Incident not found.' as const };
@@ -240,21 +247,23 @@ export async function triageAndDispatch(admin: SupabaseClient, incidentId: strin
   const ticket = Array.isArray(incident.ticket) ? incident.ticket[0] : incident.ticket;
   const closed = ['rejected', 'closed', 'resolved'].includes(incident.status);
   const dispatched: Agency[] = [];
+  let firstDispatchId: string | null = null;
   if (ticket && !closed && !result.held) {
     for (const agency of result.agencies) {
-      const { error: dispatchError } = await admin.from('ticket_dispatches').insert({
+      const { data: created, error: dispatchError } = await admin.from('ticket_dispatches').insert({
         ticket_id: ticket.id,
         agency,
         note: (result.source === 'ai'
           ? `Auto-dispatched by TUGON AI (${result.severity}). ${result.reason}`
           : `Auto-dispatched by keyword rules (${result.severity}), AI unavailable. Please review.`).slice(0, 1000),
         dispatched_by: null,
-      });
+      }).select('id').single();
       if (dispatchError && dispatchError.code !== '23505') {
         console.error('TRIAGE: dispatch failed', agency, dispatchError.message);
         continue;
       }
       dispatched.push(agency);
+      if (created && !firstDispatchId) firstDispatchId = created.id;
     }
   }
 
@@ -280,7 +289,54 @@ export async function triageAndDispatch(admin: SupabaseClient, incidentId: strin
       })));
       if (notifyError) console.error('TRIAGE: agency notification failed', notifyError.message);
     }
+
+    if (firstDispatchId) await attachFreeFieldTeam(admin, firstDispatchId, incident, result.severity);
   }
 
   return { result, dispatched };
+}
+
+/**
+ * Sends the first free MDRRMO field team (Team Alpha, then Bravo, then Charlie) with the
+ * AI's agency dispatch, the same way an admin attaches one by hand. Best effort: when every
+ * team is busy or none exists, the dispatch still stands and the admin assigns a team later.
+ * shortcut: two reports triaged at the same instant can pick the same team; add a row lock if that happens.
+ */
+async function attachFreeFieldTeam(
+  admin: SupabaseClient,
+  dispatchId: string,
+  incident: { id: string; incident_type: string; barangay: string },
+  severity: TriageSeverity,
+) {
+  const { data: team } = await admin
+    .from('field_teams')
+    .select('id, user_id, name')
+    .eq('is_active', true)
+    .is('current_incident_id', null)
+    .order('name', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!team) {
+    console.error('TRIAGE: no free field team to attach');
+    return;
+  }
+  const { error } = await admin
+    .from('dispatch_observers')
+    .insert({ dispatch_id: dispatchId, field_team_id: team.id, assigned_by: null });
+  if (error) {
+    console.error('TRIAGE: field team not attached', team.name, error.message);
+    return;
+  }
+  await admin.from('field_teams').update({ current_incident_id: incident.id }).eq('id', team.id);
+  if (team.user_id) {
+    const { error: notifyError } = await admin.from('notifications').insert({
+      user_id: team.user_id,
+      title: 'New incident assignment',
+      body: `${incident.incident_type} in ${incident.barangay} (${severity}). Check the app for details.`,
+      notification_type: 'status_update',
+      entity_type: 'incident',
+      entity_id: incident.id,
+    });
+    if (notifyError) console.error('TRIAGE: team notification failed', notifyError.message);
+  }
 }

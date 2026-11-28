@@ -23,6 +23,7 @@ export type Incident = {
   assigned_responder_id: string | null;
   reported_at: string;
   affected_people: number;
+  injured_people: number;
   description: string;
   latitude: number | null;
   longitude: number | null;
