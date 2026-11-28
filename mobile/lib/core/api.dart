@@ -133,7 +133,19 @@ class TugonApi {
         .insert({...payload, 'reporter_id': _userId})
         .select('id')
         .single();
-    return (response as Map)['id'].toString();
+    final id = (response as Map)['id'].toString();
+    // Fire and forget: the server runs AI severity triage and auto-dispatch.
+    // A failure here never blocks the report; admins still see it untriaged.
+    requestTriage(id).catchError((_) {});
+    return id;
+  }
+
+  Future<void> requestTriage(String incidentId) async {
+    final base = dotenv.env['API_BASE_URL'];
+    final token = client.auth.currentSession?.accessToken;
+    if (base == null || token == null) return;
+    await Dio().post('$base/api/incidents/$incidentId/triage',
+        options: Options(headers: {'Authorization': 'Bearer $token'}));
   }
 
   /// Uploads evidence to the private bucket and records its metadata.

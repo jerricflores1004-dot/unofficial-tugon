@@ -25,7 +25,9 @@ const WORKFLOW: { status: IncidentStatus; label: string; hint: string }[] = [
   { status: 'closed', label: 'Incident closed', hint: 'No further action required' },
 ];
 
-const STATUS_ORDER: IncidentStatus[] = ['pending', 'verified', 'responding', 'resolved', 'closed'];
+const AGENCY_LABELS: Record<string, string> = { bfp: 'BFP', pnp: 'PNP', coast_guard: 'Coast Guard' };
+
+const STATUS_ORDER: IncidentStatus[] =['pending', 'verified', 'responding', 'resolved', 'closed'];
 
 export default function IncidentDetailPage({ params }: { params: { id: string } }) {
   const detail = useApi<IncidentDetailRow>(`/api/incidents/${params.id}`, [params.id]);
@@ -63,6 +65,16 @@ export default function IncidentDetailPage({ params }: { params: { id: string } 
     try {
       await sendResource(`/api/incidents/${params.id}`, 'PATCH', body);
       setToast(message);
+      detail.reload();
+      workspace.reload();
+    } catch (cause) { setToast(describeError(cause)); } finally { setBusy(null); }
+  }
+
+  async function runTriage() {
+    setBusy('triage');
+    try {
+      await sendResource(`/api/incidents/${params.id}/triage`, 'POST', {});
+      setToast('AI triage finished.');
       detail.reload();
       workspace.reload();
     } catch (cause) { setToast(describeError(cause)); } finally { setBusy(null); }
@@ -119,6 +131,22 @@ export default function IncidentDetailPage({ params }: { params: { id: string } 
           <Detail label="Affected people" value={`${incident.affected_people} reported`} />
           <Detail label="Priority reason" value={incident.severity === 'critical' ? 'Critical severity' : incident.severity === 'high' && incident.vulnerable_groups.length > 0 ? 'High severity with a vulnerable group' : `Severity set to ${incident.severity}`} />
         </div>
+
+        <div className="mt-5 flex flex-col gap-3 rounded-xl border border-blue/20 bg-blue/5 p-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 text-xs leading-5 text-slate-600 dark:text-slate-300">
+            <p className="font-bold uppercase tracking-wider text-blue">{incident.ai_source === 'rules' ? 'Triage (keyword rules, AI unavailable)' : 'AI triage'}</p>
+            {incident.ai_triaged_at
+              ? <>
+                <p className="mt-1"><strong>{incident.severity.toUpperCase()}</strong> · Auto-dispatched to {incident.ai_agencies.length > 0 ? incident.ai_agencies.map((agency) => AGENCY_LABELS[agency] ?? agency).join(', ') : 'no agency (MDRRMO handles it)'}</p>
+                {incident.ai_reason && <p className="mt-1">{incident.ai_reason}</p>}
+                <p className="mt-1 text-[11px] text-slate-400">{relativeTime(incident.ai_triaged_at)}</p>
+              </>
+              : <p className="mt-1">Not triaged yet. The report was not auto-dispatched.</p>}
+          </div>
+          {canManage && !incident.ai_triaged_at && <Button size="sm" disabled={busy !== null} onClick={() => void runTriage()}>
+            {busy === 'triage' ? <Loader2 size={14} className="animate-spin" /> : <Shield size={15} />} Run AI triage
+          </Button>}
+        </div>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(300px,.75fr)]">
@@ -128,7 +156,7 @@ export default function IncidentDetailPage({ params }: { params: { id: string } 
             <p className="whitespace-pre-line text-sm leading-6 text-slate-600 dark:text-slate-300">{incident.description || 'No description was submitted with this report.'}</p>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <InfoBlock label="Incident type" value={incident.type} />
-              <InfoBlock label="Severity reported" value={incident.severity.toUpperCase()} />
+              <InfoBlock label="Severity" value={incident.severity.toUpperCase()} />
               <InfoBlock label="Barangay" value={incident.barangay} />
               <InfoBlock label="Exact location" value={incident.location} />
               <InfoBlock label="Vulnerable groups" value={incident.vulnerable_groups.length > 0 ? incident.vulnerable_groups.join(', ') : 'None declared'} />

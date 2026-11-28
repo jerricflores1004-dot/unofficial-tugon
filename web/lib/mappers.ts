@@ -79,6 +79,10 @@ export function mapIncident(row: Row): Incident {
     verified_at: nullableText(row.verified_at),
     resolved_at: nullableText(row.resolved_at),
     created_at: text(row.created_at, text(row.reported_at)),
+    ai_reason: nullableText(row.ai_reason),
+    ai_agencies: Array.isArray(row.ai_agencies) ? row.ai_agencies.map((item: unknown) => String(item)) : [],
+    ai_source: row.ai_source === 'ai' || row.ai_source === 'rules' ? row.ai_source : null,
+    ai_triaged_at: nullableText(row.ai_triaged_at),
   };
 }
 

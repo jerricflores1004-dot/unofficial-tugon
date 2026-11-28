@@ -30,6 +30,10 @@ export type Incident = {
   verified_at: string | null;
   resolved_at: string | null;
   created_at: string;
+  ai_reason: string | null;
+  ai_agencies: string[];
+  ai_source: 'ai' | 'rules' | null;
+  ai_triaged_at: string | null;
 };
 
 export type IncidentUpdate = {

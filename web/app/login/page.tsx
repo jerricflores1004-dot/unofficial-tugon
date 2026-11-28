@@ -7,24 +7,15 @@ import { Button, Spinner } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { describeError, request } from '@/lib/api-client';
 
-type Mode = 'signin' | 'reset' | 'responder';
-type Agency = 'bfp' | 'pnp' | 'coast_guard';
-
-const AGENCIES: { value: Agency; label: string }[] = [
-  { value: 'bfp', label: 'Bureau of Fire Protection (BFP)' },
-  { value: 'pnp', label: 'Philippine National Police (PNP)' },
-  { value: 'coast_guard', label: 'Philippine Coast Guard' },
-];
+type Mode = 'signin' | 'reset';
 
 const TITLES: Record<Mode, string> = {
   signin: 'Welcome back',
   reset: 'Reset your password',
-  responder: 'Responder sign in',
 };
 const SUBTITLES: Record<Mode, string> = {
   signin: 'Sign in to continue to your response workspace.',
   reset: 'Supabase Auth will email you a reset link.',
-  responder: 'Sign in as BFP, PNP, or the Philippine Coast Guard to receive dispatches.',
 };
 
 export default function LoginPage() {
@@ -34,7 +25,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [agency, setAgency] = useState<Agency | ''>('');
 
   function switchMode(next: Mode) {
     setMode(next);
@@ -47,24 +37,8 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
     try {
-      await request('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-      router.replace('/dashboard');
-      router.refresh();
-    } catch (cause) {
-      setError(describeError(cause));
-      setLoading(false);
-    }
-  }
-
-  async function signInResponder(input: { email: string; password: string; agency: string }) {
-    setLoading(true);
-    setError('');
-    try {
-      const result = await request<{ profile?: { role?: string } }>('/api/auth/responder-login', {
-        method: 'POST',
-        body: JSON.stringify({ email: input.email, password: input.password, agency: input.agency }),
-      });
-      // Agency accounts land on their dispatch inbox, not the admin dashboard.
+      const result = await request<{ profile?: { role?: string } }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+      // The account's role decides where it lands: agency accounts go to their dispatch inbox.
       router.replace(result?.profile?.role === 'department_head' ? '/responder' : '/dashboard');
       router.refresh();
     } catch (cause) {
@@ -90,12 +64,6 @@ export default function LoginPage() {
     const data = new FormData(event.currentTarget);
     const email = String(data.get('email') ?? '').trim();
     if (mode === 'reset') { void resetPassword(email); return; }
-    if (mode === 'responder') {
-      const password = String(data.get('password') ?? '');
-      if (!agency) { setError('Select your responder agency.'); return; }
-      void signInResponder({ email, password, agency });
-      return;
-    }
     void signIn(email, String(data.get('password') ?? ''));
   }
 
@@ -147,18 +115,6 @@ export default function LoginPage() {
               </div>
             </label>
 
-            {mode === 'responder' && <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Responder agency
-              <div className="inset-control mt-2 flex items-center gap-2 px-3">
-                <Shield size={17} className="text-slate-400" />
-                <select required name="agency" autoComplete="off" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" value={agency} onChange={(event) => setAgency(event.target.value as Agency)}>
-                  <option value="">Select agency</option>
-                  {AGENCIES.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-            </label>}
-
             {mode !== 'reset' && <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Password
               <div className="inset-control mt-2 flex items-center gap-2 px-3">
                 <LockKeyhole size={17} className="text-slate-400" />
@@ -187,20 +143,7 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {mode === 'signin' && <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
-            Signing in as a responder?{' '}
-            <button type="button" onClick={() => switchMode('responder')} className="font-bold text-blue hover:underline">
-              Responder sign in (BFP · PNP · Coast Guard)
-            </button>
-          </p>}
-          {mode === 'responder' && <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
-            Municipal staff sign in{' '}
-            <button type="button" onClick={() => switchMode('signin')} className="font-bold text-blue hover:underline">
-              here
-            </button>
-          </p>}
-
-          <p className="mt-10 text-center text-[11px] text-slate-400">{mode === 'responder' ? 'Responder accounts are created by the TUGON system administrator.' : 'Need access? Contact the TUGON system administrator.'}</p>
+          <p className="mt-10 text-center text-[11px] text-slate-400">MDRRMO staff and agency accounts (BFP · PNP · Coast Guard) sign in here. Need access? Contact the TUGON system administrator.</p>
         </div>
       </section>
     </div>

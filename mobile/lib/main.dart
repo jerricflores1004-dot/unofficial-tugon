@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'core/api.dart';
 import 'core/models.dart';
 import 'core/offline_queue.dart';
@@ -1108,20 +1109,9 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                             style: const TextStyle(fontSize: 11, color: TugonColors.muted))),
                   const SizedBox(height: 25),
                   const SectionLabel(
-                      icon: Icons.priority_high_rounded, text: 'Severity'),
-                  SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(value: 'low', label: Text('Low')),
-                        ButtonSegment(value: 'medium', label: Text('Medium')),
-                        ButtonSegment(value: 'high', label: Text('High')),
-                        ButtonSegment(value: 'critical', label: Text('Critical'))
-                      ],
-                      selected: {severity},
-                      onSelectionChanged: (values) =>
-                          setState(() => severity = values.first)),
-                  const SizedBox(height: 10),
+                      icon: Icons.auto_awesome_outlined, text: 'Severity'),
                   const Text(
-                      'Priority is calculated by the database from severity and vulnerable groups.',
+                      'TUGON AI reads your report, sets the severity (Low, Medium, High or Critical) and sends it to the right agency automatically.',
                       style:
                           TextStyle(fontSize: 11, color: TugonColors.muted, height: 1.4)),
                   const SizedBox(height: 25),
@@ -1475,7 +1465,9 @@ class ResidentScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
       body: child,
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Emergency911Button(),
+        NavigationBar(
           selectedIndex: index,
           onDestinationSelected: (value) =>
               context.go(['/', '/reports', '/notifications', '/profile'][value]),
@@ -1496,5 +1488,34 @@ class ResidentScaffold extends StatelessWidget {
                 icon: Icon(Icons.person_outline),
                 selectedIcon: Icon(Icons.person),
                 label: 'Profile')
-          ]));
+          ])
+      ]));
+}
+
+/// Opens the phone dialer on 911. A phone call uses the cellular network,
+/// so this works without mobile data or Wi-Fi.
+class Emergency911Button extends StatelessWidget {
+  const Emergency911Button({super.key});
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+      top: false,
+      bottom: false,
+      child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton.icon(
+                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+                  onPressed: () async {
+                    final opened = await launchUrl(Uri(scheme: 'tel', path: '911'));
+                    if (!opened && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('Could not open the dialer. Dial 911 directly.')));
+                    }
+                  },
+                  icon: const Icon(Icons.call),
+                  label: const Text('Call 911',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800))))));
 }
