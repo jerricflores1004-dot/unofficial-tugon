@@ -458,6 +458,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
+      // 911 must work before sign-in: no account needed in an emergency.
+      bottomNavigationBar: const SafeArea(child: Emergency911Button()),
       body: SafeArea(
           child: Center(
               child: SingleChildScrollView(
