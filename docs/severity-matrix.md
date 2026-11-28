@@ -22,6 +22,8 @@ The definitions live in code at `web/lib/severity-matrix.ts`; the AI prompt and 
 | **Area scope** | One spot or household | Several households or one street | Whole barangay | Two or more barangays | NDRRMC Memo Circular No. 44, s. 2016 (IMT levels) |
 | **Resources needed** | Information only | One unit | Several units, or one agency plus MDRRMO | Several agencies at once | ESI resource count; ICS incident complexity typing |
 
+**People affected vs. life threat.** "People affected" counts everyone the incident touches (stranded, blocked, displaced), even when nobody is hurt. Injuries and danger to life are scored separately under "Life threat". The resident's own "people affected" number sets the minimum score (1–2 people = 1, 3–9 or any vulnerable person = 2, 10 or more = 3); the AI can score higher, for example from a photo, but never lower.
+
 The AI scores only what the report and photos actually show. Life threat and people affected are 0 when no person is mentioned or visible, even for a fire or a flood.
 
 ## Credibility check (false reports)

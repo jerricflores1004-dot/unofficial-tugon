@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { CREDIBILITY, METRICS, metricsPrompt, severityFromMetrics, type Credibility, type Metrics } from './severity-matrix';
+import { CREDIBILITY, METRICS, metricsPrompt, reportedPeopleScore, severityFromMetrics, type Credibility, type Metrics } from './severity-matrix';
 
 export type Agency = 'bfp' | 'pnp' | 'coast_guard';
 export type TriageSeverity = 'low' | 'medium' | 'high' | 'critical';
@@ -132,6 +132,7 @@ export async function classifyIncident(incident: IncidentInput, photos: TriagePh
   for (const model of GEMINI_MODELS) {
     try {
       const { agencies, reason, photo_findings, credibility, credibility_note, ...scores } = await askGemini(model, apiKey, report, photos);
+      scores.people_affected = Math.max(scores.people_affected, reportedPeopleScore(incident.affected_people, incident.vulnerable_groups));
       return {
         severity: severityFromMetrics(scores),
         agencies: agencies.filter((agency, index) => agencies.indexOf(agency) === index),
