@@ -16,6 +16,16 @@ describe('classifyIncident (Gemini)', () => {
     await expect(classifyIncident(report)).resolves.toEqual({ severity: 'critical', agencies: ['coast_guard'], reason: 'People in the water.', source: 'ai' });
   });
 
+  it('tries the backup model when the first one is overloaded', async () => {
+    vi.stubEnv('GEMINI_API_KEY', 'test-key');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('{"error":{"code":503}}', { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ severity: 'high', agencies: ['coast_guard'], reason: 'Boat sank.' }) }] } }] })));
+    vi.stubGlobal('fetch', fetchMock);
+    expect((await classifyIncident(report)).source).toBe('ai');
+    expect(fetchMock.mock.calls.map(([url]) => String(url).match(/models\/([^:]+)/)?.[1])).toEqual(['gemini-flash-lite-latest', 'gemini-flash-latest']);
+  });
+
   it('falls back to rules on a bad answer or HTTP error', async () => {
     vi.stubEnv('GEMINI_API_KEY', 'test-key');
     vi.stubGlobal('fetch', geminiReply(JSON.stringify({ severity: 'extreme', agencies: [], reason: '' })));

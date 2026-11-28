@@ -49,42 +49,52 @@ const RESPONSE_SCHEMA = {
   required: ['severity', 'agencies', 'reason'],
 };
 
-// "gemini-flash-latest" follows Google's current Flash model, so retirements don't break triage.
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent';
+// "-latest" aliases follow Google's current models, so retirements don't break triage.
+// Flash-Lite first: fast enough for one short classification. Flash is the backup
+// when Lite is overloaded (503) or slow; keyword rules are the last resort.
+const GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-flash-latest'];
+const GEMINI_TIMEOUT_MS = 15_000;
+
+async function askGemini(model: string, apiKey: string, report: string) {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM }] },
+      contents: [{ role: 'user', parts: [{ text: `<report>\n${report}\n</report>` }] }],
+      generationConfig: { responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA, temperature: 0 },
+    }),
+  });
+  if (!response.ok) throw new Error(`Gemini HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
+  const body = await response.json();
+  const text = body?.candidates?.[0]?.content?.parts?.[0]?.text;
+  const check = TriageSchema.safeParse(typeof text === 'string' ? JSON.parse(text) : null);
+  if (!check.success) throw new Error('Gemini returned an unexpected answer.');
+  return check.data;
+}
 
 export async function classifyIncident(incident: IncidentInput): Promise<TriageResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return classifyByRules(incident);
-  try {
-    const report = [
-      `Type: ${incident.incident_type}`,
-      `Barangay: ${incident.barangay}`,
-      `Location: ${incident.location_text}`,
-      `People affected: ${incident.affected_people ?? 0}`,
-      `Vulnerable groups: ${(incident.vulnerable_groups ?? []).join(', ') || 'none'}`,
-      `Description: ${incident.description}`,
-    ].join('\n');
-    const response = await fetch(GEMINI_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      signal: AbortSignal.timeout(30_000),
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM }] },
-        contents: [{ role: 'user', parts: [{ text: `<report>\n${report}\n</report>` }] }],
-        generationConfig: { responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA, temperature: 0 },
-      }),
-    });
-    if (!response.ok) throw new Error(`Gemini HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
-    const body = await response.json();
-    const text = body?.candidates?.[0]?.content?.parts?.[0]?.text;
-    const check = TriageSchema.safeParse(typeof text === 'string' ? JSON.parse(text) : null);
-    if (!check.success) throw new Error('Gemini returned an unexpected answer.');
-    const parsed = check.data;
-    return { severity: parsed.severity, agencies: parsed.agencies.filter((agency, index) => parsed.agencies.indexOf(agency) === index), reason: parsed.reason.slice(0, 500), source: 'ai' };
-  } catch (error) {
-    console.error('TRIAGE: AI classification failed, using rules', error instanceof Error ? error.message : error);
-    return classifyByRules(incident);
+  const report = [
+    `Type: ${incident.incident_type}`,
+    `Barangay: ${incident.barangay}`,
+    `Location: ${incident.location_text}`,
+    `People affected: ${incident.affected_people ?? 0}`,
+    `Vulnerable groups: ${(incident.vulnerable_groups ?? []).join(', ') || 'none'}`,
+    `Description: ${incident.description}`,
+  ].join('\n');
+  for (const model of GEMINI_MODELS) {
+    try {
+      const parsed = await askGemini(model, apiKey, report);
+      return { severity: parsed.severity, agencies: parsed.agencies.filter((agency, index) => parsed.agencies.indexOf(agency) === index), reason: parsed.reason.slice(0, 500), source: 'ai' };
+    } catch (error) {
+      console.error(`TRIAGE: ${model} failed`, error instanceof Error ? error.message : error);
+    }
   }
+  console.error('TRIAGE: AI classification failed, using rules');
+  return classifyByRules(incident);
 }
 
 // Keyword fallback when the AI is not configured or fails. English + Filipino.
