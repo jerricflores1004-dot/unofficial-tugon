@@ -9,7 +9,7 @@ function geminiReply(text: string, status = 200) {
 }
 
 const SCORES = { life_threat: 3, people_affected: 2, spread_risk: 2, area_scope: 0, resource_need: 2 };
-const answer = (extra: object = {}) => JSON.stringify({ ...SCORES, agencies: ['coast_guard', 'coast_guard'], photo_findings: 'Photo shows a capsized boat.', reason: 'People in the water.', ...extra });
+const answer = (extra: object = {}) => JSON.stringify({ ...SCORES, agencies: ['coast_guard', 'coast_guard'], photo_findings: 'Photo shows a capsized boat.', credibility: 'consistent', credibility_note: 'Photo matches the text.', reason: 'People in the water.', ...extra });
 
 describe('classifyIncident (Gemini)', () => {
   const report = { location_text: 'Port', barangay: 'Anilao', affected_people: 3, vulnerable_groups: [], incident_type: 'Sea', description: 'Lumubog ang bangka, may tatlong tao sa tubig' };
@@ -19,9 +19,17 @@ describe('classifyIncident (Gemini)', () => {
     const fetchMock = geminiReply(answer());
     vi.stubGlobal('fetch', fetchMock);
     const result = await classifyIncident(report, [{ mimeType: 'image/jpeg', data: 'AAAA' }]);
-    expect(result).toEqual({ severity: 'critical', agencies: ['coast_guard'], reason: 'People in the water.', source: 'ai', metrics: { ...SCORES, photo_findings: 'Photo shows a capsized boat.' } });
+    expect(result).toEqual({ severity: 'critical', agencies: ['coast_guard'], reason: 'People in the water.', source: 'ai', held: false, metrics: { ...SCORES, photo_findings: 'Photo shows a capsized boat.', credibility: 'consistent', credibility_note: 'Photo matches the text.' } });
     const parts = JSON.parse(fetchMock.mock.calls[0][1].body).contents[0].parts;
     expect(parts[0]).toEqual({ inline_data: { mime_type: 'image/jpeg', data: 'AAAA' } });
+  });
+
+  it('holds a report the AI finds implausible', async () => {
+    vi.stubEnv('GEMINI_API_KEY', 'test-key');
+    vi.stubGlobal('fetch', geminiReply(answer({ credibility: 'implausible', credibility_note: 'Fire on plain water is impossible.' })));
+    const result = await classifyIncident(report);
+    expect(result.held).toBe(true);
+    expect(result.metrics?.credibility).toBe('implausible');
   });
 
   it('tries the backup model when the first one is overloaded', async () => {

@@ -10,7 +10,7 @@ export const METRICS = [
     label: 'Life threat',
     basis: 'START triage (red/yellow/green) and Emergency Severity Index level 1–2',
     levels: [
-      'None: nobody hurt or in danger',
+      'None: nobody hurt or in danger, or no person is mentioned or visible',
       'Minor: small injuries, people can walk (START green)',
       'Serious: injuries that need care soon but can wait minutes to hours (START yellow)',
       'Immediate: trapped, unconscious, not breathing, drowning, heavy bleeding or active violence (START red, ESI level 1)',
@@ -65,6 +65,33 @@ export const METRICS = [
 export type MetricKey = (typeof METRICS)[number]['key'];
 export type Metrics = Record<MetricKey, number>;
 export type Severity = 'low' | 'medium' | 'high' | 'critical';
+
+/**
+ * Credibility check: does the report make sense? Only "implausible" stops the
+ * automatic dispatch; the report then waits for an admin, who can still dispatch it.
+ */
+export const CREDIBILITY = [
+  {
+    value: 'consistent',
+    label: 'Consistent',
+    meaning: 'Text, photos and location agree, and the event is physically possible.',
+    action: 'Dispatched automatically',
+  },
+  {
+    value: 'doubtful',
+    label: 'Doubtful',
+    meaning: 'Some details do not fit (vague text, unclear or partly unrelated photo), but it could be real.',
+    action: 'Dispatched automatically, flagged so staff verify it',
+  },
+  {
+    value: 'implausible',
+    label: 'Likely false',
+    meaning: 'Impossible as described, the photo clearly contradicts the text or is a meme, cartoon, screenshot or stock image, or it reads as a prank.',
+    action: 'Held for admin review, not dispatched automatically',
+  },
+] as const;
+
+export type Credibility = (typeof CREDIBILITY)[number]['value'];
 
 export const SEVERITY_RULE = [
   { severity: 'critical', when: 'Life threat is 3 (Immediate), or the total is 11 or more out of 15' },
