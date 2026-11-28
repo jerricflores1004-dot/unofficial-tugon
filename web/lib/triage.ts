@@ -154,7 +154,9 @@ export async function triageAndDispatch(admin: SupabaseClient, incidentId: strin
       const { error: dispatchError } = await admin.from('ticket_dispatches').insert({
         ticket_id: ticket.id,
         agency,
-        note: `Auto-dispatched by TUGON AI (${result.severity}). ${result.reason}`.slice(0, 1000),
+        note: (result.source === 'ai'
+          ? `Auto-dispatched by TUGON AI (${result.severity}). ${result.reason}`
+          : `Auto-dispatched by keyword rules (${result.severity}), AI unavailable. Please review.`).slice(0, 1000),
         dispatched_by: null,
       });
       if (dispatchError && dispatchError.code !== '23505') {
