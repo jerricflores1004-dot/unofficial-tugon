@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Bell, ChevronDown, ChevronLeft, ChevronRight, FileBarChart2, LayoutDashboard, LogOut, Map,
+  Bell, ChevronDown, ChevronLeft, ChevronRight, FileBarChart2, Flag, LayoutDashboard, LogOut, Map,
   Menu, Moon, Radio, Search, Settings, Shield, Siren, Sun, Ticket, Users, X, type LucideIcon,
 } from 'lucide-react';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase';
@@ -79,6 +79,7 @@ export function AppShell({ children, title, eyebrow, action, variant }: { childr
     : [
         { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
         { label: 'Incidents', href: '/incidents', icon: Siren, badge: summary.data?.attention_incidents ?? 0 },
+        { label: 'Flagged reports', href: '/flagged', icon: Flag },
         { label: 'Tickets', href: '/tickets', icon: Ticket },
         { label: 'Responders', href: '/responders', icon: Users },
         { label: 'Live map', href: '/map', icon: Map },

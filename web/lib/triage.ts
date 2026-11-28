@@ -225,6 +225,18 @@ export async function triageAndDispatch(admin: SupabaseClient, incidentId: strin
   if (updateError) return { error: 'Unable to save the triage result.' as const };
   if (!claimed?.length) return { skipped: true as const };
 
+  // Keep a permanent audit entry for every report flagged as likely false (best effort).
+  if (result.held) {
+    const { error: logError } = await admin.from('system_logs').insert({
+      actor_id: null,
+      action: 'AI_FLAGGED_FALSE_REPORT',
+      entity_type: 'incident',
+      entity_id: incident.id,
+      metadata: { severity: result.severity, suggested_agencies: result.agencies, note: result.metrics?.credibility_note ?? null },
+    });
+    if (logError) console.error('TRIAGE: flag log failed', logError.message);
+  }
+
   const ticket = Array.isArray(incident.ticket) ? incident.ticket[0] : incident.ticket;
   const closed = ['rejected', 'closed', 'resolved'].includes(incident.status);
   const dispatched: Agency[] = [];

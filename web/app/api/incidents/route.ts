@@ -27,6 +27,10 @@ export async function GET(request: Request) {
   if (until && !Number.isNaN(Date.parse(until))) query = query.lte('reported_at', new Date(until).toISOString());
   if (url.searchParams.get('geolocated') === 'true') query = query.not('latitude', 'is', null).not('longitude', 'is', null);
   if (url.searchParams.get('unassigned') === 'true') query = query.is('assigned_responder_id', null);
+  // Reports the AI flagged as likely false live on the Flagged reports page. They leave
+  // the normal queue unless an admin confirmed them as real (verified or later).
+  if (url.searchParams.get('flagged') === 'true') query = query.eq('ai_metrics->>credibility', 'implausible');
+  else query = query.or('ai_metrics->>credibility.is.null,ai_metrics->>credibility.neq.implausible,status.in.(verified,responding,resolved,closed)');
   if (search) query = query.or(`incident_type.ilike.%${search}%,barangay.ilike.%${search}%,location_text.ilike.%${search}%`);
 
   const { data, error, count } = await query;

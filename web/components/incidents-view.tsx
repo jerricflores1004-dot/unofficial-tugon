@@ -28,7 +28,8 @@ function downloadCsv(filename: string, rows: (string | number | null)[][]) {
   URL.revokeObjectURL(url);
 }
 
-export function IncidentsView() {
+/** `flagged` shows only the reports the AI flagged as likely false. */
+export function IncidentsView({ flagged = false }: { flagged?: boolean }) {
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
@@ -50,6 +51,7 @@ export function IncidentsView() {
     status: status === 'all' ? null : status,
     priority: priority === 'all' ? null : priority,
     search: search || null,
+    flagged: flagged ? 'true' : null,
   });
   const { rows, count, loading, error, reload } = usePagedApi<Record<string, any>>(path, [path]);
   const incidents = useMemo(() => rows.map(mapIncident), [rows]);
@@ -71,6 +73,7 @@ export function IncidentsView() {
           status: status === 'all' ? null : status,
           priority: priority === 'all' ? null : priority,
           search: search || null,
+          flagged: flagged ? 'true' : null,
         }));
         collected.push(...(envelope.data ?? []).map(mapIncident));
         if ((envelope.data ?? []).length < 100) break;
@@ -106,7 +109,7 @@ export function IncidentsView() {
     <div className="surface overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-slate-200/70 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6 dark:border-slate-700">
         <div>
-          <h3 className="text-sm font-bold text-navy dark:text-white">Incident queue</h3>
+          <h3 className="text-sm font-bold text-navy dark:text-white">{flagged ? 'Flagged reports' : 'Incident queue'}</h3>
           <p className="mt-1 text-xs text-slate-500">{loading ? 'Querying the database…' : `${count} record${count === 1 ? '' : 's'} match the current filters · sorted by most recent`}</p>
         </div>
         <div className="flex gap-2">
