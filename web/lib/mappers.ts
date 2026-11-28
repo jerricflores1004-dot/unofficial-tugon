@@ -72,6 +72,7 @@ export function mapIncident(row: Row): Incident {
     assigned_responder_id: nullableText(row.assigned_responder_id),
     reported_at: text(row.reported_at, new Date(0).toISOString()),
     affected_people: number(row.affected_people),
+    injured_people: number(row.injured_people),
     description: text(row.description),
     latitude: nullableNumber(row.latitude),
     longitude: nullableNumber(row.longitude),

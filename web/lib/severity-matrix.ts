@@ -112,6 +112,11 @@ export function reportedPeopleScore(count: number | null, vulnerableGroups: stri
   return 0;
 }
 
+/** The lowest "life threat" score the resident's injured count allows: anyone hurt means at least 2. */
+export function reportedLifeThreatScore(injured: number | null): number {
+  return (injured ?? 0) > 0 ? 2 : 0;
+}
+
 export function severityFromMetrics(metrics: Metrics): Severity {
   const total = METRICS.reduce((sum, metric) => sum + metrics[metric.key], 0);
   if (metrics.life_threat === 3 || total >= 11) return 'critical';

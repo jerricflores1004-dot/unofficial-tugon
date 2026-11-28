@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { classifyByRules, classifyIncident } from './triage';
-import { reportedPeopleScore, severityFromMetrics } from './severity-matrix';
+import { reportedLifeThreatScore, reportedPeopleScore, severityFromMetrics } from './severity-matrix';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -29,6 +29,15 @@ describe('classifyIncident (Gemini)', () => {
     vi.stubGlobal('fetch', geminiReply(answer({ people_affected: 1 })));
     const result = await classifyIncident({ ...report, affected_people: 6 });
     expect(result.metrics?.people_affected).toBe(2);
+  });
+
+  it('raises life threat to at least 2 when the resident reports anyone injured', async () => {
+    vi.stubEnv('GEMINI_API_KEY', 'test-key');
+    vi.stubGlobal('fetch', geminiReply(answer({ life_threat: 0, people_affected: 0, spread_risk: 0, area_scope: 0, resource_need: 1 })));
+    const result = await classifyIncident({ ...report, affected_people: 0, injured_people: 1 });
+    expect(result.metrics?.life_threat).toBe(2);
+    expect(result.metrics?.people_affected).toBe(1);
+    expect(result.severity).toBe('high');
   });
 
   it('holds a report the AI finds implausible', async () => {
@@ -66,6 +75,14 @@ describe('reportedPeopleScore', () => {
     expect(reportedPeopleScore(1, ['elderly'])).toBe(2);
     expect(reportedPeopleScore(12, null)).toBe(3);
     expect(reportedPeopleScore(null, null)).toBe(0);
+  });
+});
+
+describe('reportedLifeThreatScore', () => {
+  it('is 2 when anyone is injured, else 0', () => {
+    expect(reportedLifeThreatScore(0)).toBe(0);
+    expect(reportedLifeThreatScore(null)).toBe(0);
+    expect(reportedLifeThreatScore(3)).toBe(2);
   });
 });
 
