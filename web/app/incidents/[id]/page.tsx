@@ -12,6 +12,7 @@ import { describeError, sendResource } from '@/lib/api-client';
 import { useApi, useApiGroup } from '@/lib/use-api';
 import { dayLabel, mapIncident, mapIncidentPhoto, mapIncidentUpdate, mapResponder, roleLabel } from '@/lib/mappers';
 import { relativeTime } from '@/lib/format';
+import { METRICS, SEVERITY_RULE } from '@/lib/severity-matrix';
 import type { Incident, IncidentPhoto, IncidentUpdate, IncidentStatus, Responder, WorkspaceSummary } from '@/lib/types';
 import { ResponsePanel } from '@/components/response-panel';
 
@@ -139,6 +140,7 @@ export default function IncidentDetailPage({ params }: { params: { id: string } 
               ? <>
                 <p className="mt-1"><strong>{incident.severity.toUpperCase()}</strong> · Auto-dispatched to {incident.ai_agencies.length > 0 ? incident.ai_agencies.map((agency) => AGENCY_LABELS[agency] ?? agency).join(', ') : 'no agency (MDRRMO handles it)'}</p>
                 {incident.ai_reason && <p className="mt-1">{incident.ai_reason}</p>}
+                {incident.ai_metrics && <SeverityMetrics metrics={incident.ai_metrics} />}
                 <p className="mt-1 text-[11px] text-slate-400">{relativeTime(incident.ai_triaged_at)}</p>
               </>
               : <p className="mt-1">Not triaged yet. The report was not auto-dispatched.</p>}
@@ -270,6 +272,29 @@ export default function IncidentDetailPage({ params }: { params: { id: string } 
     </div>
     {toast && <Toast onClose={() => setToast(null)}>{toast}</Toast>}
   </AppShell>;
+}
+
+/** The AI's 0–3 score per metric, and the fixed rule that turned them into the severity. */
+function SeverityMetrics({ metrics }: { metrics: Record<string, number | string> }) {
+  const total = METRICS.reduce((sum, metric) => sum + Number(metrics[metric.key] ?? 0), 0);
+  return <div className="mt-3 rounded-lg border border-slate-200/70 bg-white/60 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+    <table className="w-full text-left text-[11px]">
+      <thead><tr className="text-slate-400"><th className="pb-1 font-semibold">Metric</th><th className="pb-1 font-semibold">Score</th><th className="pb-1 font-semibold">Meaning</th></tr></thead>
+      <tbody>
+        {METRICS.map((metric) => {
+          const score = Number(metrics[metric.key] ?? 0);
+          return <tr key={metric.key} className="align-top">
+            <td className="py-0.5 pr-3 font-semibold" title={metric.basis}>{metric.label}</td>
+            <td className="py-0.5 pr-3">{score}/3</td>
+            <td className="py-0.5">{metric.levels[score] ?? ''}</td>
+          </tr>;
+        })}
+        <tr><td className="pt-1 pr-3 font-bold">Total</td><td className="pt-1 pr-3 font-bold">{total}/15</td><td /></tr>
+      </tbody>
+    </table>
+    {typeof metrics.photo_findings === 'string' && <p className="mt-2"><strong>Photos:</strong> {metrics.photo_findings}</p>}
+    <p className="mt-2 text-[10px] text-slate-400">Severity rule: {SEVERITY_RULE.map((rule) => `${rule.severity.toUpperCase()} if ${rule.when.toLowerCase()}`).join('; ')}.</p>
+  </div>;
 }
 
 function Detail({ label, value }: { label: string; value: string }) {

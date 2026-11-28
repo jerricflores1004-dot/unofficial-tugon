@@ -133,13 +133,12 @@ class TugonApi {
         .insert({...payload, 'reporter_id': _userId})
         .select('id')
         .single();
-    final id = (response as Map)['id'].toString();
-    // Fire and forget: the server runs AI severity triage and auto-dispatch.
-    // A failure here never blocks the report; admins still see it untriaged.
-    requestTriage(id).catchError((_) {});
-    return id;
+    return (response as Map)['id'].toString();
   }
 
+  /// Asks the server to run AI severity triage and auto-dispatch. Call it after
+  /// the photos are uploaded so the AI can look at them. Callers fire and
+  /// forget: a failure never blocks the report, and admins can re-run triage.
   Future<void> requestTriage(String incidentId) async {
     final base = dotenv.env['API_BASE_URL'];
     final token = client.auth.currentSession?.accessToken;
@@ -193,7 +192,8 @@ class TugonApi {
     for (final report in pending) {
       final payload = Map<String, dynamic>.from(report)..remove('queued_at');
       try {
-        await submitIncident(payload);
+        final id = await submitIncident(payload);
+        requestTriage(id).catchError((_) {});
         synced++;
       } catch (_) {
         break;

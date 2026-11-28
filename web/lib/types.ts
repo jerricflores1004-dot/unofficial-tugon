@@ -34,6 +34,7 @@ export type Incident = {
   ai_agencies: string[];
   ai_source: 'ai' | 'rules' | null;
   ai_triaged_at: string | null;
+  ai_metrics: Record<string, number | string> | null;
 };
 
 export type IncidentUpdate = {
