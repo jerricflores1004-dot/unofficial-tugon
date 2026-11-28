@@ -34,7 +34,7 @@ The AI also checks whether the report makes sense as a real event:
 | **Doubtful** | Some details do not fit (vague text, unclear or partly unrelated photo), but it could be real | Dispatched automatically, flagged so staff verify it |
 | **Likely false** | Impossible as described (for example a fire on plain water with no boat, fuel or oil), the photo clearly contradicts the text, the photo is a meme, cartoon, screenshot or stock image, or it reads as a prank | **Held for admin review, not dispatched.** The admin can still dispatch it or reject it. |
 
-Safety rules for the AI: a report is never marked false only because of short text, typos, Taglish or a missing photo, and when a life might really be at risk the AI must choose "Doubtful", not "Likely false". A held report is never lost: it stays in the admin's incident list, marked "held, possible false report".
+Safety rules for the AI: a report is never marked false only because of short text, typos, Taglish or a missing photo, and when a life might really be at risk the AI must choose "Doubtful", not "Likely false". A held report is never lost or deleted: it moves out of the incident queue into the admin's **Flagged reports** page, and the flag is recorded in the system logs (`AI_FLAGGED_FALSE_REPORT`). If the admin confirms it is real (verifies or dispatches it), it returns to the incident queue; if not, the admin rejects it and it stays on the Flagged reports page as a record.
 
 ## Severity rule
 
